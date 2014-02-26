@@ -60,11 +60,37 @@ class Feature(namedtuple('_Feature', 'name filename load_time')):
                 os.path.getmtime(self.filename) <= self.load_time)
 
 
+class Environment(object):
+    """The environment of an interpreter."""
+
+    def __init__(self):
+        self.features = {}
+        self.top_level = {}
+
+    @property
+    def outdated(self):
+        return any(feature.outdated for feature in self.features.itervalues())
+
+    def intern(self, symbol):
+        name = symbol.value()
+        symbol = self.top_level.setdefault(name, Symbol(name))
+        return symbol
+
+    def provide(self, feature, filename=None):
+        load_time = (os.path.getmtime(filename)
+                     if filename and os.path.isfile(filename) else 0)
+        feature = Feature(name=feature, filename=filename, load_time=load_time)
+        self.features[feature.name] = feature
+        return feature
+
+    def is_provided(self, feature):
+        return feature in self.features
+
 
 class AbstractInterpreter(object):
 
     def defun(self, _function, name, arglist, docstring=None, *_rest):
-        symbol = self.intern(name, )
+        symbol = self.env.intern(name)
         symbol.scopes.add('function')
         symbol.properties['function_arglist'] = [s.value() for s in arglist]
         if docstring:
@@ -72,7 +98,7 @@ class AbstractInterpreter(object):
 
     def defvar(self, function, name, _initial_value=None, docstring=None,
                *_rest):
-        symbol = self.intern(name)
+        symbol = self.env.intern(name)
         symbol.scopes.add('variable')
         if docstring:
             symbol.properties['variable_documentation'] = docstring
@@ -92,28 +118,17 @@ class AbstractInterpreter(object):
         'eval-when-compile': eval_inner,
     }
 
-    def __init__(self, load_path, **functions):
+    def __init__(self, load_path, env=None, **functions):
         if not load_path:
             raise ValueError('Empty load path!')
-
         self.functions = dict(self.DEFAULT_FUNCTIONS)
         self.functions.update(functions)
-        self.top_level = {}
+        self.env = env or Environment()
         self.load_path = load_path
-        self.features = {}
-
-    @property
-    def outdated(self):
-        return any(feature.outdated for feature in self.features.itervalues())
-
-    def intern(self, symbol):
-        name = symbol.value()
-        symbol = self.top_level.setdefault(name, Symbol(name))
-        return symbol
 
     def locate(self, feature):
-        if feature in self.features:
-            return self.features[feature].filename
+        if feature in self.env.features:
+            return self.env.features[feature].filename
         else:
             filename = feature + '.el'
             candidates = (os.path.join(d, filename)
@@ -121,15 +136,12 @@ class AbstractInterpreter(object):
             return next((f for f in candidates if os.path.isfile(f)), None)
 
     def require(self, feature):
-        if feature not in self.features:
+        if not self.env.is_provided(feature):
             filename = self.locate(feature)
             if not filename:
                 raise LookupError('Cannot locate library: {0}'.format(feature))
             self.load(filename)
-            self.features[feature] = Feature(
-                name=feature,
-                filename=filename,
-                load_time=os.path.getmtime(filename))
+            self.env.provide(feature, filename=filename)
 
     def load(self, library):
         for sexp in self.read_file(library):
