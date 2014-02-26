@@ -24,6 +24,8 @@
 
 
 import os
+import os.path
+from collections import namedtuple
 
 import sexpdata
 
@@ -50,10 +52,19 @@ class Symbol(object):
         return self.name != other.name
 
 
+class Feature(namedtuple('_Feature', 'name filename load_time')):
+
+    @property
+    def outdated(self):
+        return (os.path.isfile(self.filename) and
+                os.path.getmtime(self.filename) <= self.load_time)
+
+
+
 class AbstractInterpreter(object):
 
     def defun(self, _function, name, arglist, docstring=None, *_rest):
-        symbol = self.intern(name)
+        symbol = self.intern(name, )
         symbol.scopes.add('function')
         symbol.properties['function_arglist'] = [s.value() for s in arglist]
         if docstring:
@@ -91,13 +102,18 @@ class AbstractInterpreter(object):
         self.load_path = load_path
         self.features = {}
 
+    @property
+    def outdated(self):
+        return any(feature.outdated for feature in self.features.itervalues())
+
     def intern(self, symbol):
         name = symbol.value()
-        return self.top_level.setdefault(name, Symbol(name))
+        symbol = self.top_level.setdefault(name, Symbol(name))
+        return symbol
 
     def locate(self, feature):
         if feature in self.features:
-            return self.features[feature]
+            return self.features[feature].filename
         else:
             filename = feature + '.el'
             candidates = (os.path.join(d, filename)
@@ -110,7 +126,10 @@ class AbstractInterpreter(object):
             if not filename:
                 raise LookupError('Cannot locate library: {0}'.format(feature))
             self.load(filename)
-            self.features[feature] = filename
+            self.features[feature] = Feature(
+                name=feature,
+                filename=filename,
+                load_time=os.path.getmtime(filename))
 
     def load(self, library):
         for sexp in self.read_file(library):
