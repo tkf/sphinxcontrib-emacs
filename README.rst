@@ -15,7 +15,7 @@ Installation
 
 ::
 
-   pip install sphinxcontrib-emacs
+   pip install git+https://github.com/flycheck/sphinxcontrib-emacs#egg=sphinxcontrib-emacs
 
 The extension requires Sphinx 1.2 and Python 2.x.
 
