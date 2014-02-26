@@ -34,9 +34,29 @@ from sphinxcontrib.emacs import nodes, visitors
 from sphinxcontrib.emacs.roles import InfoNodeXRefRole
 from sphinxcontrib.emacs.domain import EmacsLispDomain
 from sphinxcontrib.emacs.info import resolve_info_references
+from sphinxcontrib.emacs.lisp import AbstractInterpreter
 
 
 __version__ = '0.1'
+
+
+def setup_interpreter(app):
+    """Create an Emacs Lisp interpreter and attach it to the environment of
+    ``app``.
+
+    """
+    env = getattr(app.env, 'emacs_lisp_environment', None)
+    if env and env.outdated:
+        # If any loaded feature is outdated, remove our interpreter
+        env = None
+
+    app.env.emacs_lisp_interpreter = AbstractInterpreter(
+        app.env.config.emacs_lisp_load_path, env=env)
+    app.env.emacs_lisp_environment = env
+
+
+def teardown_interpreter(_app, env):
+    del env.emacs_lisp_interpreter
 
 
 def setup(app):
@@ -46,6 +66,9 @@ def setup(app):
 
     """
     app.require_sphinx('1.2')
+    # Create the interpreter
+    app.connect(str('builder-inited'), setup_interpreter)
+    app.connect(str('env-updated'), teardown_interpreter)
     # Emacs description units
     app.add_domain(EmacsLispDomain)
     # Auto doc support
