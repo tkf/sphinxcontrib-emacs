@@ -51,7 +51,7 @@ def setup(app):
     app.add_config_value('emacs_lisp_load_path', [], 'env')
     # Texinfo references
     app.add_role('infonode', InfoNodeXRefRole())
-    app.connect('missing-reference', resolve_info_references)
+    app.connect(str('missing-reference'), resolve_info_references)
     # Nodes
     app.add_node(nodes.el_parameterlist,
                  html=(visitors.html.visit_el_parameterlist,
