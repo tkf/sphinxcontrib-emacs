@@ -29,6 +29,7 @@ from sphinx.roles import XRefRole
 from sphinx.domains import Domain, ObjType
 from sphinx.util.nodes import make_refnode
 
+from sphinxcontrib.emacs import lisp
 from sphinxcontrib.emacs import roles as rolefuncs
 from sphinxcontrib.emacs.directives import desc
 from sphinxcontrib.emacs.directives.other import RequireLibrary
@@ -87,13 +88,25 @@ class EmacsLispDomain(Domain):
     }
     indices = []
 
-    data_version = 3
+    data_version = 4
     initial_data = {
         # fullname -> scope -> (docname, objtype)
         'namespace': {},
         'features': set(),
-        'loaded_symbols': {}
+        'environment': None,
     }
+
+    def __init__(self, build_env):
+        Domain.__init__(self, build_env)
+        interpreter_env = self.data['environment']
+        if interpreter_env and interpreter_env.outdated:
+            # Reset the environment if it is outdated
+            interpreter_env = None
+
+        self.interpreter = lisp.AbstractInterpreter(
+            build_env.config.emacs_lisp_load_path,
+            env=interpreter_env)
+        self.data['environment'] = self.interpreter.env
 
     def clear_doc(self, docname):
         namespace = self.data['namespace']

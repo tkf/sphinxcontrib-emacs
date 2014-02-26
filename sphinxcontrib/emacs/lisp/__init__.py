@@ -60,7 +60,7 @@ class Feature(namedtuple('_Feature', 'name filename load_time')):
                 os.path.getmtime(self.filename) <= self.load_time)
 
 
-class Environment(object):
+class AbstractEnvironment(object):
     """The environment of an interpreter."""
 
     def __init__(self):
@@ -123,7 +123,7 @@ class AbstractInterpreter(object):
             raise ValueError('Empty load path!')
         self.functions = dict(self.DEFAULT_FUNCTIONS)
         self.functions.update(functions)
-        self.env = env or Environment()
+        self.env = env or AbstractEnvironment()
         self.load_path = load_path
 
     def locate(self, feature):

@@ -110,7 +110,8 @@ class EmacsLispSymbol(ObjectDescription):
         return name
 
     def lookup_symbol(self, name):
-        return self.env.domaindata[self.domain]['loaded_symbols'].get(name)
+        env = self.env.domaindata[self.domain]['environment']
+        return env.top_level.get(name)
 
     def get_auto_docstring(self):
         symbol = self.lookup_symbol(self.names[0])

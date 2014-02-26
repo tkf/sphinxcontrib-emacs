@@ -36,7 +36,7 @@ class RequireLibrary(Directive):
     def run(self):
         self.domain, self.objtype = self.name.split(':', 1)
         env = self.state.document.settings.env
-        interpreter = env.emacs_lisp_interpreter
+        interpreter = env.domains['el'].interpreter
         feature = self.arguments[0]
 
         try:
