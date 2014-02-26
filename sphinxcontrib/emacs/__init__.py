@@ -45,6 +45,7 @@ def setup(app):
     ``app`` is the Sphinx application object to add this extension to.
 
     """
+    app.require_sphinx('1.2')
     # Emacs description units
     app.add_domain(EmacsLispDomain)
     # Auto doc support
