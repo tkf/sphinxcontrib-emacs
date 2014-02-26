@@ -1,0 +1,28 @@
+# -*- mode: conf; -*-
+
+[Reports]
+msg-template={path}:{line}:{column}:{C}:{msg} ({msg_id})
+
+[FORMAT]
+# Ignore long lines which contain URLs, for the sake of convenience.  Splitting
+# URLs in strings is just stupid.
+ignore-long-lines=https?://\S+$
+
+[VARIABLES]
+
+# Treat variables ending with an underscore as acceptable dummy variables
+dummy-variables-rgx=_.*$
+
+[DESIGN]
+# Ease the design requirements to fit docutils special requirements.  The node
+# hierarchy leads to deeper inheritance hierarchies than allowed by default, so
+# we increase the number of permitted parent classes.  Also, nodes and directive
+# base classes have a lot of public methods, which pop up in our inherited
+# classes, so we also increase the number of maximum public methods.  Together,
+# these prevent false positives for R0901 and R0904
+max-parents=15
+max-public-methods=60
+
+[CLASSES]
+# The run() method of Directives may also add instance attributes
+defining-attr-methods=__new__,__init__,run
