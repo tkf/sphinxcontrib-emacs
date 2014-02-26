@@ -67,8 +67,9 @@ class AbstractInterpreter(object):
             symbol.properties['variable_documentation'] = docstring
         symbol.properties['local_variable'] = function.endswith('-local')
 
-    def eval_inner(self, _function, *args):
-        self.eval_all(args)
+    def eval_inner(self, _function, *body):
+        for sexp in body:
+            self.eval(sexp)
 
     DEFAULT_FUNCTIONS = {
         'defun': defun,
@@ -86,13 +87,13 @@ class AbstractInterpreter(object):
 
         self.functions = dict(self.DEFAULT_FUNCTIONS)
         self.functions.update(functions)
-        self.namespace = namespace if namespace is not None else {}
+        self.top_level = {}
         self.load_path = load_path
         self.features = {}
 
     def intern(self, symbol):
         name = symbol.value()
-        return self.namespace.setdefault(name, Symbol(name))
+        return self.top_level.setdefault(name, Symbol(name))
 
     def locate(self, feature):
         if feature in self.features:
@@ -100,7 +101,7 @@ class AbstractInterpreter(object):
         else:
             filename = feature + '.el'
             candidates = (os.path.join(d, filename)
-                          for d in config.emacs_lisp_load_path)
+                          for d in self.load_path)
             return next((f for f in candidates if os.path.isfile(f)), None)
 
     def require(self, feature):
@@ -112,7 +113,8 @@ class AbstractInterpreter(object):
             self.features[feature] = filename
 
     def load(self, library):
-        return self.eval_sexps(self.read_file(library))
+        for sexp in self.read_file(library):
+            self.eval(sexp)
 
     def read(self, string):
         return sexpdata.loads(string, nil=None, true=None, false=None)
@@ -123,14 +125,10 @@ class AbstractInterpreter(object):
             # sexpdata
             return self.read('(\n{0}\n)'.format(source.read()))
 
-    def eval_sexp(self, sexp):
+    def eval(self, sexp):
         function_name = sexp[0]
         args = sexp[1:]
         function = self.functions.get(function_name.value())
         if function:
             # pylint: disable=W0142
             return function(self, function_name.value(), *args)
-
-    def eval_sexps(self, sexps):
-        for sexp in sexps:
-            self.eval(sexp)
