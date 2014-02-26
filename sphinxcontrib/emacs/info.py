@@ -19,9 +19,15 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+"""
+Info manual support.
+"""
+
 import re
-from sphinx.roles import XRefRole
+
 from docutils import nodes
+
+from sphinxcontrib.emacs.nodes import infonode_reference
 
 
 #: Regular expression object to parse the contents of an Info reference role.
@@ -36,28 +42,7 @@ INFO_MANUAL_URLS = {
 }
 
 
-class InfoNodeXRefRole(XRefRole):
-    """A role to reference a node in an Info manual."""
-
-    def process_link(self, env, refnode, has_explicit_title, title, target):
-        # Normalize whitespace in info node targets
-        target = re.sub(r'\s+', ' ', target, flags=re.UNICODE)
-        refnode['has_explicit_title'] = has_explicit_title
-        if not has_explicit_title:
-            match = INFO_RE.match(target)
-            if match:
-                # Swap title and node to create a title like info does
-                title = '{0}({1})'.format(match.group('node'),
-                                          match.group('manual'))
-        return title, target
-
-
-class infonode_reference(nodes.reference):
-    """A reference node to cross-reference an Info manual node."""
-    pass
-
-
-def resolve_info_references(app, env, refnode, contnode):
+def resolve_info_references(app, _env, refnode, contnode):
     """Resolve Info references.
 
     Process all :class:`~sphinx.addnodes.pending_xref` nodes whose ``reftype``
@@ -104,28 +89,3 @@ def resolve_info_references(app, env, refnode, contnode):
             reference['reftitle'] = target
             reference.append(contnode)
             return reference
-
-
-def visit_infonode_reference(self, node):
-    """Process a :class:`infonode_reference` node for Texinfo output.
-
-    Add a corresponding ``@ref`` command to the body, and skip the children of
-    the node.
-
-    """
-    infonode = node['refnode']
-    manual = node['refmanual']
-
-    name = node.astext().strip() if node['has_explicit_title'] else ''
-
-    self.body.append('@ref{{{node},,{name},{manual}}}'.format(
-        node=infonode, name=self.escape_menu(name), manual=manual))
-
-    # Skip the node body
-    raise nodes.SkipNode
-
-
-def setup(app):
-    app.add_role('infonode', InfoNodeXRefRole(innernodeclass=nodes.emphasis))
-    app.add_node(infonode_reference, texinfo=(visit_infonode_reference, None))
-    app.connect('missing-reference', resolve_info_references)
