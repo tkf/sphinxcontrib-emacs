@@ -99,7 +99,7 @@ class Inliner(object):
     inline_patterns = re.compile(
         r"""
         (?:\*(?P<emphasis>[^*]+)\*) | # An emphasis
-        (?:(?P<infoprefix>[Ii]nfo\s+(?:node|anchor)\s+)`(?P<infonode>[^']+)') | # An info reference
+        (?:(?P<infoprefix>[Ii]nfo\s+(?:[Nn]ode|[Aa]nchor)\s+)`(?P<infonode>[^']+)') | # An info reference
         (?:(?P<cmdprefix>[Cc]ommand\s+)`(?P<command>[^']+)') | # A command reference
         (?:(?P<funprefix>[Ff]unction\s+)`(?P<function>[^']+)') | # A function reference
         (?:(?P<optprefix>[Oo]ption\s+)`(?P<option>[^']+)') | # A option reference
