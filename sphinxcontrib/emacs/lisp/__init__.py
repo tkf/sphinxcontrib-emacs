@@ -35,6 +35,11 @@ def is_quoted_symbol(sexp):
             isinstance(sexp.value(), sexpdata.Symbol))
 
 
+def is_primitive(sexp):
+    return ((isinstance(sexp, list) and sexp == [])
+            or isinstance(sexp, (int, long, basestring, bool)))
+
+
 def unquote(sexp):
     if not isinstance(sexp, sexpdata.Quoted):
         raise ValueError('Not a quoted expression: {0!r}'.format(sexp))
@@ -111,12 +116,14 @@ class AbstractEnvironment(object):
 class AbstractInterpreter(object):
 
     def put(self, _function, name, prop, value):
-        # We can only handle quoted constant symbols here.
-        # FIXME: We should also handle constant symbols here!
-        if all(is_quoted_symbol(s) for s in [name, prop, value]):
+        if all(is_quoted_symbol(s) for s in [name, prop]):
             symbol = self.env.intern(unquote(name))
             prop = unquote(prop).value()
-            value = self.env.intern(unquote(value))
+            if is_quoted_symbol(value):
+                value = self.env.intern(unquote(value))
+            elif not is_primitive(value):
+                # We cannot handle non-constant values
+                return
             symbol.properties[prop] = value
 
     def defun(self, _function, name, arglist, docstring=None, *_rest):
