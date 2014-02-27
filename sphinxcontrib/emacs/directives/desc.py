@@ -41,7 +41,7 @@ class EmacsLispSymbol(ObjectDescription):
     }
     option_spec.update(ObjectDescription.option_spec)
 
-    docstring_property = 'variable_documentation'
+    docstring_property = 'variable-documentation'
 
     @property
     def object_type(self):
@@ -202,7 +202,7 @@ class EmacsLispVariable(EmacsLispSymbol):
             return True
         else:
             symbol = self.lookup_auto_symbol()
-            return symbol and symbol.properties.get('local_variable')
+            return symbol and symbol.properties.get('buffer-local')
 
     @property
     def is_risky_variable(self):
@@ -265,11 +265,11 @@ class EmacsLispFunction(EmacsLispSymbol):
 
     """
 
-    docstring_property = 'function_documentation'
+    docstring_property = 'function-documentation'
 
     def get_auto_signature(self, symbol):
         sig = EmacsLispSymbol.get_auto_signature(self, symbol)
-        arglist = ' '.join(symbol.properties.get('function_arglist', []))
+        arglist = ' '.join(symbol.properties.get('function-arglist', []))
         return (sig + ' ' + arglist).strip()
 
     def handle_signature(self, sig, signode):

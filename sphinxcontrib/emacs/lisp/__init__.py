@@ -129,9 +129,9 @@ class AbstractInterpreter(object):
     def defun(self, _function, name, arglist, docstring=None, *_rest):
         symbol = self.env.intern(name)
         symbol.scopes.add('function')
-        symbol.properties['function_arglist'] = [s.value() for s in arglist]
+        symbol.properties['function-arglist'] = [s.value() for s in arglist]
         if docstring:
-            symbol.properties['function_documentation'] = docstring
+            symbol.properties['function-documentation'] = docstring
 
     def defvar(self, function, name, _initial_value=None, docstring=None,
                *rest):
@@ -139,7 +139,7 @@ class AbstractInterpreter(object):
         symbol.scopes.add('variable')
         if docstring:
             if isinstance(docstring, basestring):
-                symbol.properties['variable_documentation'] = docstring
+                symbol.properties['variable-documentation'] = docstring
             else:
                 # The docstring isn't a string, so we put it back into the
                 # remaining arguments
@@ -161,7 +161,7 @@ class AbstractInterpreter(object):
                     safe_predicate).value()
             if plist.get(':risky'):
                 symbol.properties['risky-local-variable'] = True
-        symbol.properties['local_variable'] = function.endswith('-local')
+        symbol.properties['buffer-local'] = function.endswith('-local')
 
     def eval_inner(self, _function, *body):
         for sexp in body:
