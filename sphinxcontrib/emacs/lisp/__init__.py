@@ -73,8 +73,7 @@ class AbstractEnvironment(object):
 
     def intern(self, symbol):
         name = symbol.value()
-        symbol = self.top_level.setdefault(name, Symbol(name))
-        return symbol
+        return self.top_level.setdefault(name, Symbol(name))
 
     def provide(self, feature, filename=None):
         load_time = (os.path.getmtime(filename)
