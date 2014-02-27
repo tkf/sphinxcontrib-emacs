@@ -114,6 +114,10 @@ class EmacsLispSymbol(ObjectDescription):
             if not symbol:
                 self.state_machine.reporter.warning(
                     'Undefined symbol {0}'.format(name), line=self.lineno)
+            elif self.emacs_lisp_scope not in symbol.scopes:
+                self.state_machine.reporter.warning(
+                    'Symbol {0} not present in scope {1}'.format(
+                        symbol.name, self.emacs_lisp_scope))
             return symbol
         else:
             return None
