@@ -72,7 +72,12 @@ class AbstractEnvironment(object):
         return any(feature.outdated for feature in self.features.itervalues())
 
     def intern(self, symbol):
-        name = symbol.value()
+        if isinstance(symbol, sexpdata.Symbol):
+            name = symbol.value()
+        elif isinstance(symbol, basestring):
+            name = symbol
+        else:
+            raise ValueError('Invalid symbol name: {0!r}'.format(symbol))
         return self.top_level.setdefault(name, Symbol(name))
 
     def provide(self, feature, filename=None):
