@@ -40,6 +40,8 @@ class EmacsLispSymbol(ObjectDescription):
     }
     option_spec.update(ObjectDescription.option_spec)
 
+    docstring_property = 'variable_documentation'
+
     @property
     def object_type(self):
         """The :class:`~sphinx.domains.ObjType` of this directive."""
@@ -61,8 +63,9 @@ class EmacsLispSymbol(ObjectDescription):
         return nodes.el_annotation(type_name, type_name)
 
     def get_signatures(self):
-        if 'auto' in self.options:
-            return [self.get_auto_signature()]
+        symbol = self.lookup_auto_symbol(self.arguments[0])
+        if symbol:
+            return [self.get_auto_signature(symbol)]
         else:
             return ObjectDescription.get_signatures(self)
 
@@ -102,35 +105,38 @@ class EmacsLispSymbol(ObjectDescription):
         indextext = '{0}; Emacs Lisp {1}'.format(name, self.object_type.lname)
         self.indexnode['entries'].append(('pair', indextext, targetname, ''))
 
-    def get_auto_signature(self):
-        name = self.arguments[0].strip()
-        if not self.lookup_symbol(name):
-            self.state_machine.reporter.warning(
-                'Undefined symbol {0}'.format(name), line=self.lineno)
-        return name
-
-    def lookup_symbol(self, name):
-        env = self.env.domaindata[self.domain]['environment']
-        return env.top_level.get(name)
-
-    def get_auto_docstring(self):
-        symbol = self.lookup_symbol(self.names[0])
-        if symbol:
-            return symbol.properties.get('variable_documentation')
-
-    def parse_docstring(self, docstring):
-        parser = DocstringParser(self.state_machine.reporter)
-        return parser.parse(docstring)
-
-    def get_auto_doc(self):
-        docstring = self.get_auto_docstring()
-        if not docstring:
-            self.state_machine.reporter.warning(
-                'no docstring for symbol {0}'.format(self.names[0]),
-                line=self.lineno)
-            return []
+    def lookup_auto_symbol(self, name=None):
+        name = name or self.names[0]
+        if 'auto' in self.options:
+            env = self.env.domaindata[self.domain]['environment']
+            symbol = env.top_level.get(name)
+            if not symbol:
+                self.state_machine.reporter.warning(
+                    'Undefined symbol {0}'.format(name), line=self.lineno)
+            return symbol
         else:
-            return self.parse_docstring(docstring)
+            return None
+
+    def get_auto_signature(self, symbol):
+        return symbol.name
+
+    def get_auto_docstring(self, symbol):
+        return symbol.properties.get(self.docstring_property)
+
+    def get_auto_doc_nodes(self):
+        symbol = self.lookup_auto_symbol()
+        if symbol:
+            docstring = self.get_auto_docstring(symbol)
+            if not docstring:
+                self.state_machine.reporter.warning(
+                    'no docstring for symbol {0}'.format(self.names[0]),
+                    line=self.lineno)
+                return []
+            else:
+                parser = DocstringParser(self.state_machine.reporter)
+                return parser.parse(docstring)
+        else:
+            return []
 
     def run(self):
         result_nodes = ObjectDescription.run(self)
@@ -139,7 +145,7 @@ class EmacsLispSymbol(ObjectDescription):
             desc_node = result_nodes[-1]
             cont_node = desc_node[-1]
             self.before_content()
-            children = self.get_auto_doc() + cont_node.children
+            children = self.get_auto_doc_nodes() + cont_node.children
             cont_node.clear()
             cont_node.extend(children)
             self.after_content()
@@ -183,18 +189,12 @@ class EmacsLispFunction(EmacsLispSymbol):
 
     """
 
-    def get_auto_signature(self):
-        symbol = self.lookup_symbol(self.arguments[0])
-        sig = self.arguments[0]
-        if symbol:
-            arglist = ' '.join(symbol.properties.get('function_arglist', []))
-            sig += ' ' + arglist
-        return sig
+    docstring_property = 'function_documentation'
 
-    def get_auto_docstring(self):
-        symbol = self.lookup_symbol(self.names[0])
-        if symbol:
-            return symbol.properties.get('function_documentation')
+    def get_auto_signature(self, symbol):
+        sig = EmacsLispSymbol.get_auto_signature(self, symbol)
+        arglist = ' '.join(symbol.properties.get('function_arglist', []))
+        return (sig + ' ' + arglist).strip()
 
     def handle_signature(self, sig, signode):
         parts = sig.split(' ')
@@ -239,10 +239,7 @@ class EmacsLispCommand(EmacsLispSymbol):
     }
     option_spec.update(EmacsLispSymbol.option_spec)
 
-    def get_auto_docstring(self):
-        symbol = self.lookup_symbol(self.names[0])
-        if symbol:
-            return symbol.properties.get('function_documentation')
+    docstring_property = 'function_documentation'
 
     def with_prefix_arg(self, binding):
         """Add the ``:prefix-arg:`` option to the given ``binding``.
