@@ -30,6 +30,17 @@ from collections import namedtuple
 import sexpdata
 
 
+def is_quoted_symbol(sexp):
+    return (isinstance(sexp, sexpdata.Quoted) and
+            isinstance(sexp.value(), sexpdata.Symbol))
+
+
+def unquote(sexp):
+    if not isinstance(sexp, sexpdata.Quoted):
+        raise ValueError('Not a quoted expression: {0!r}'.format(sexp))
+    return sexp.value()
+
+
 class Symbol(object):
     def __init__(self, name):
         self.name = name
@@ -93,6 +104,15 @@ class AbstractEnvironment(object):
 
 class AbstractInterpreter(object):
 
+    def put(self, _function, name, prop, value):
+        # We can only handle quoted constant symbols here.
+        # FIXME: We should also handle constant symbols here!
+        if all(is_quoted_symbol(s) for s in [name, prop, value]):
+            symbol = self.env.intern(unquote(name))
+            prop = unquote(prop).value()
+            value = self.env.intern(unquote(value))
+            symbol.properties[prop] = value
+
     def defun(self, _function, name, arglist, docstring=None, *_rest):
         symbol = self.env.intern(name)
         symbol.scopes.add('function')
@@ -113,6 +133,7 @@ class AbstractInterpreter(object):
             self.eval(sexp)
 
     DEFAULT_FUNCTIONS = {
+        'put': put,
         'defun': defun,
         'defmacro': defun,
         'defvar': defvar,
