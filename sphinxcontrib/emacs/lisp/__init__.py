@@ -201,7 +201,7 @@ class AbstractInterpreter(object):
             self.eval(sexp)
 
     def read(self, string):
-        return sexpdata.loads(string, nil=None, true=None, false=None)
+        return sexpdata.loads(string)
 
     def read_file(self, filename):
         with open(filename, 'r') as source:
