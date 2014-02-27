@@ -23,6 +23,7 @@
 """Directives for description of objects."""
 
 
+from docutils import nodes as corenodes
 from docutils.parsers.rst import directives
 from sphinx import addnodes
 from sphinx.directives import ObjectDescription
@@ -142,8 +143,7 @@ class EmacsLispSymbol(ObjectDescription):
         result_nodes = ObjectDescription.run(self)
 
         if 'auto' in self.options:
-            desc_node = result_nodes[-1]
-            cont_node = desc_node[-1]
+            cont_node = result_nodes[-1][-1]
             self.before_content()
             children = self.get_auto_doc_nodes() + cont_node.children
             cont_node.clear()
@@ -179,6 +179,48 @@ class EmacsLispCLSlot(EmacsLispSymbol):
         if not struct:
             raise ValueError('Missing containing structure')
         return struct + '-' + name
+
+
+class EmacsLispVariable(EmacsLispSymbol):
+    """A directive to describe an Emacs Lisp variable.
+
+    This directive is different from :class:`EmacsLispSymbol` in that it adds
+    special options for variables, namely whether a variable is buffer local.
+
+    """
+
+    option_spec = {
+        'local': directives.flag
+    }
+    option_spec.update(EmacsLispSymbol.option_spec)
+
+    @property
+    def is_local_variable(self):
+        if 'local' in self.options:
+            return True
+        else:
+            symbol = self.lookup_auto_symbol()
+            return symbol and symbol.properties.get('local_variable')
+
+    def variable_annotations(self):
+        title = corenodes.title('Variable properties', 'Variable properties')
+        body = corenodes.paragraph('', '')
+        annotations = corenodes.admonition(
+            '', title, body, classes=['el-variable-properties'])
+        if self.is_local_variable:
+            message = 'Automatically becomes buffer-local when set.  '
+            body += corenodes.Text(message, message)
+        return annotations if len(body) > 0 else None
+
+    def run(self):
+        result_nodes = EmacsLispSymbol.run(self)
+
+        annotations = self.variable_annotations()
+        if annotations:
+            cont_node = result_nodes[-1][-1]
+            cont_node.insert(0, annotations)
+
+        return result_nodes
 
 
 class EmacsLispFunction(EmacsLispSymbol):
