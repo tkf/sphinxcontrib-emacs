@@ -191,6 +191,7 @@ class EmacsLispVariable(EmacsLispSymbol):
 
     option_spec = {
         'local': directives.flag,
+        'risky': directives.flag,
         'safe': directives.unchanged,
     }
     option_spec.update(EmacsLispSymbol.option_spec)
@@ -203,6 +204,14 @@ class EmacsLispVariable(EmacsLispSymbol):
             symbol = self.lookup_auto_symbol()
             return symbol and symbol.properties.get('local_variable')
 
+    @property
+    def is_risky_variable(self):
+        if 'risky' in self.options:
+            return True
+        else:
+            symbol = self.lookup_auto_symbol()
+            return symbol and symbol.properties.get('risky-local-variable')
+
     def get_safe_variable_predicate(self):
         safe = self.options.get('safe')
         if not safe:
@@ -211,25 +220,31 @@ class EmacsLispVariable(EmacsLispSymbol):
         if safe:
             return str(safe)
 
+    def add_inline_text(self, text, node):
+        children, msgs = self.state.inline_text(text, self.lineno)
+        node += children
+        node += msgs
+
     def variable_annotations(self):
         title = corenodes.title('Variable properties', 'Variable properties')
         body = corenodes.paragraph('', '')
-        annotations = corenodes.admonition(
+        props = corenodes.admonition(
             '', title, body, classes=['el-variable-properties'])
         if self.is_local_variable:
-            local_nodes, msgs = self.state.inline_text(
-                'Automatically becomes buffer-local when set.  ', self.lineno)
-            body += local_nodes
-            body += msgs
+            self.add_inline_text(
+                'Automatically becomes buffer-local when set.  ', body)
+        if self.is_risky_variable:
+            self.add_inline_text(
+                'This variable may be risky if used as a file-local '
+                'variable.  ', body)
         safe_predicate = self.get_safe_variable_predicate()
         if safe_predicate:
-            message = ('This variable is safe as a file local variable if its '
-                       'value satisfies the predicate '
-                       ':el:function:`{0}`.  '.format(safe_predicate))
-            safety_nodes, msgs = self.state.inline_text(message, self.lineno)
-            body += safety_nodes
-            body += msgs
-        return annotations if len(body) > 0 else None
+            self.add_inline_text(
+                'This variable is safe as a file local variable if its value '
+                'satisfies the predicate :el:function:`{0}`.  '.format(
+                    safe_predicate), body)
+
+        return props if len(body) > 0 else None
 
     def run(self):
         result_nodes = EmacsLispSymbol.run(self)
