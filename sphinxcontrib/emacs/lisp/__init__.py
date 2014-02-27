@@ -41,6 +41,12 @@ def unquote(sexp):
     return sexp.value()
 
 
+def to_plist(sexps):
+    keys = [s.value() for s in sexps[::2]]
+    values = sexps[1::2]
+    return dict(zip(keys, values))
+
+
 class Symbol(object):
     def __init__(self, name):
         self.name = name
@@ -121,11 +127,33 @@ class AbstractInterpreter(object):
             symbol.properties['function_documentation'] = docstring
 
     def defvar(self, function, name, _initial_value=None, docstring=None,
-               *_rest):
+               *rest):
         symbol = self.env.intern(name)
         symbol.scopes.add('variable')
         if docstring:
-            symbol.properties['variable_documentation'] = docstring
+            if isinstance(docstring, basestring):
+                symbol.properties['variable_documentation'] = docstring
+            else:
+                # The docstring isn't a string, so we put it back into the
+                # remaining arguments
+                rest = [docstring] + list(rest)
+                docstring = None
+        if rest:
+            # Destructure and evaluate the keyword arguments of defcustom's
+            plist = to_plist(rest)
+            package_version = plist.get(':package-version')
+            if isinstance(package_version, sexpdata.Quoted):
+                package_version = unquote(package_version)
+                if isinstance(package_version, list):
+                    package = package_version[0].value()
+                    version = package_version[2]
+                    symbol.properties['package-version'] = (package, version)
+            safe_predicate = plist.get(':safe')
+            if is_quoted_symbol(safe_predicate):
+                symbol.properties['safe-local-variable'] = unquote(
+                    safe_predicate).value()
+            if plist.get(':risky'):
+                symbol.properties['risky-local-variable'] = True
         symbol.properties['local_variable'] = function.endswith('-local')
 
     def eval_inner(self, _function, *body):
