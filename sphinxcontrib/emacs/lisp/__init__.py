@@ -32,7 +32,7 @@ import sexpdata
 
 class Symbol(object):
     def __init__(self, name):
-        self.name = name,
+        self.name = name
         self.scopes = set()
         self.properties = {}
 
