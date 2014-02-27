@@ -319,7 +319,7 @@ class EmacsLispCommand(EmacsLispSymbol):
     }
     option_spec.update(EmacsLispSymbol.option_spec)
 
-    docstring_property = 'function_documentation'
+    docstring_property = 'function-documentation'
 
     def with_prefix_arg(self, binding):
         """Add the ``:prefix-arg:`` option to the given ``binding``.
