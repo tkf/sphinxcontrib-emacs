@@ -139,7 +139,12 @@ class EmacsLispSymbol(ObjectDescription):
                 return []
             else:
                 parser = DocstringParser(self.state_machine.reporter)
-                return parser.parse(docstring)
+                source = symbol.source_of_scope(self.emacs_lisp_scope)
+                # FIXME: We should have a source mapping over the whole source
+                # file, but unfortunately sexpdata doesn't provide source
+                # locations
+                return parser.parse(docstring, source_file=source.file,
+                                    source_symbol=symbol.name)
         else:
             return []
 

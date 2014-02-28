@@ -38,12 +38,14 @@ class Parser(object):
     def __init__(self, reporter):
         self.reporter = reporter
 
-    def parse(self, inputstring):
+    def parse(self, inputstring, source_file=None, source_symbol=None):
         statemachine = DocstringStateMachine(
             initial_state='Body', reporter=self.reporter, debug=True)
         inputlines = string2lines(inputstring, tab_width=8,
                                   convert_whitespace=True)
-        return statemachine.run(inputlines)
+        if source_file and source_symbol:
+            input_source = '{0}#{1}'.format(source_file, source_symbol)
+        return statemachine.run(inputlines, input_source=input_source)
 
 
 class DocstringStateMachine(StateMachineWS):

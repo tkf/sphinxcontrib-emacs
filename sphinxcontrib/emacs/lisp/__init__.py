@@ -26,6 +26,7 @@
 import os
 import os.path
 from collections import namedtuple
+from contextlib import contextmanager
 
 import sexpdata
 
@@ -52,10 +53,17 @@ def to_plist(sexps):
     return dict(zip(keys, values))
 
 
+class Source(namedtuple('_Source', 'file feature')):
+
+    @property
+    def empty(self):
+        return (not self.file) and (not self.feature)
+
+
 class Symbol(object):
     def __init__(self, name):
         self.name = name
-        self.scopes = set()
+        self.scopes = {}
         self.properties = {}
 
     def __str__(self):
@@ -72,6 +80,9 @@ class Symbol(object):
 
     def __ne__(self, other):
         return self.name != other.name
+
+    def source_of_scope(self, scope):
+        return self.scopes.get(scope)
 
 
 class Feature(namedtuple('_Feature', 'name filename load_time')):
@@ -115,7 +126,7 @@ class AbstractEnvironment(object):
 
 class AbstractInterpreter(object):
 
-    def put(self, _function, name, prop, value):
+    def put(self, _context, _function, name, prop, value):
         if all(is_quoted_symbol(s) for s in [name, prop]):
             symbol = self.env.intern(unquote(name))
             prop = unquote(prop).value()
@@ -126,17 +137,15 @@ class AbstractInterpreter(object):
                 return
             symbol.properties[prop] = value
 
-    def defun(self, _function, name, arglist, docstring=None, *_rest):
-        symbol = self.env.intern(name)
-        symbol.scopes.add('function')
+    def defun(self, context, _function, name, arglist, docstring=None, *_rest):
+        symbol = self.intern_in_scope(name, 'function', context)
         symbol.properties['function-arglist'] = [s.value() for s in arglist]
         if docstring:
             symbol.properties['function-documentation'] = docstring
 
-    def defvar(self, function, name, _initial_value=None, docstring=None,
-               *rest):
-        symbol = self.env.intern(name)
-        symbol.scopes.add('variable')
+    def defvar(self, context, function, name, _initial_value=None,
+               docstring=None, *rest):
+        symbol = self.intern_in_scope(name, 'variable', context)
         if docstring:
             if isinstance(docstring, basestring):
                 symbol.properties['variable-documentation'] = docstring
@@ -163,7 +172,7 @@ class AbstractInterpreter(object):
                 symbol.properties['risky-local-variable'] = True
         symbol.properties['buffer-local'] = function.endswith('-local')
 
-    def eval_inner(self, _function, *body):
+    def eval_inner(self, _context, _function, *body):
         for sexp in body:
             self.eval(sexp)
 
@@ -186,6 +195,12 @@ class AbstractInterpreter(object):
         self.env = env or AbstractEnvironment()
         self.load_path = load_path
 
+    def intern_in_scope(self, symbol, scope, context):
+        symbol = self.env.intern(symbol)
+        symbol.scopes[scope] = Source(file=context.get('load_file_name'),
+                                      feature=context.get('load_feature'))
+        return symbol
+
     def locate(self, feature):
         if feature in self.env.features:
             return self.env.features[feature].filename
@@ -195,17 +210,19 @@ class AbstractInterpreter(object):
                           for d in self.load_path)
             return next((f for f in candidates if os.path.isfile(f)), None)
 
-    def require(self, feature):
+    def require(self, feature, context=None):
         if not self.env.is_provided(feature):
             filename = self.locate(feature)
             if not filename:
                 raise LookupError('Cannot locate library: {0}'.format(feature))
-            self.load(filename)
+            context = new_context(context, load_feature=feature)
+            self.load(filename, context)
             self.env.provide(feature, filename=filename)
 
-    def load(self, library):
+    def load(self, library, context=None):
+        context = new_context(context, load_file_name=library)
         for sexp in self.read_file(library):
-            self.eval(sexp)
+            self.eval(sexp, context=context)
 
     def read(self, string):
         return sexpdata.loads(string)
@@ -216,10 +233,14 @@ class AbstractInterpreter(object):
             # sexpdata
             return self.read('(\n{0}\n)'.format(source.read()))
 
-    def eval(self, sexp):
+    def eval(self, sexp, context=None):
         function_name = sexp[0]
         args = sexp[1:]
         function = self.functions.get(function_name.value())
         if function:
             # pylint: disable=W0142
-            return function(self, function_name.value(), *args)
+            return function(self, context or {}, function_name.value(), *args)
+
+
+def new_context(old_context, **kwargs):
+    return dict(old_context or {}, **kwargs)
