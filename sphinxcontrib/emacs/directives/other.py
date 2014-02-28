@@ -34,6 +34,13 @@ class RequireLibrary(Directive):
     has_content = False
 
     def run(self):
+        """Run this directive.
+
+        Load the feature with the abstract interpreter of
+        :class:`~sphinxcontrib.emacs.domain.EmacsLispDomain`, and make the
+        current document depend on the feature source.
+
+        """
         self.domain, self.objtype = self.name.split(':', 1)
         env = self.state.document.settings.env
         interpreter = env.domains['el'].interpreter

@@ -59,19 +59,38 @@ class EmacsLispSymbol(ObjectDescription):
         Return the type annotation node, preferably a :class:`el_annotation`
         node.
 
+        By default, return the localized title of the object type corresponding
+        to this directive.
+
         """
         type_name = self.object_type.lname.title() + ' '
         return nodes.el_annotation(type_name, type_name)
 
     def get_signatures(self):
+        """Get all signatures of the current description unit.
+
+        If the symbol is auto-documented, get the source code signature via
+        :meth:`get_auto_signature`.  Otherwise, fall back to Sphinx' standard
+        means of parsing signatures.
+
+        Return a list of all signatures.
+
+        """
         symbol = self.lookup_auto_symbol(self.arguments[0])
         if symbol:
             return [self.get_auto_signature(symbol)]
         else:
             return ObjectDescription.get_signatures(self)
 
-    def handle_signature(self, sig, signode):
-        parts = sig.split()
+    def handle_signature(self, signature, signode):
+        """Handle a single ``signature``.
+
+        Extract the symbol name from ``signature``, and add it to the
+        ``signode``, and prepend the type annotation from
+        :meth:`make_type_annotation` to it, if any.
+
+        """
+        parts = signature.split()
         name = parts[0]
 
         annotation = self.make_type_annotation()
@@ -83,6 +102,11 @@ class EmacsLispSymbol(ObjectDescription):
         return name
 
     def add_target_and_index(self, name, sig, signode):
+        """Add the target and index.
+
+        Add the target to the environment, and create an index entry.
+
+        """
         # We must add the scope to target names, because Emacs Lisp allows for
         # variables and commands with the same name
         targetname = make_target(self.emacs_lisp_scope, name)
@@ -107,6 +131,19 @@ class EmacsLispSymbol(ObjectDescription):
         self.indexnode['entries'].append(('pair', indextext, targetname, ''))
 
     def lookup_auto_symbol(self, name=None):
+        """Get the symbol with ``name`` for auto-documentation.
+
+        If ``name`` is ``None``, use the name extracted from the first
+        signature.
+
+        If the ``auto`` option was set, try to get and return the
+        :class:`~sphinxcontrib.emacs.lisp.Symbol` with ``name`` from the
+        domain's interpreter environment.  If the symbol was not found, return
+        ``None``.
+
+        If the ``auto`` option was not set, always return ``None``.
+
+        """
         name = name or self.names[0]
         if 'auto' in self.options:
             env = self.env.domaindata[self.domain]['environment']
@@ -123,12 +160,35 @@ class EmacsLispSymbol(ObjectDescription):
             return None
 
     def get_auto_signature(self, symbol):
+        """Get the signature of ``symbol``.
+
+        ``symbol`` is a :class:`~sphinxcontrib.emacs.lisp.Symbol` from the
+        abstract interpreter, as returned by :meth:`lookup_auto_symbol`.
+
+        """
         return symbol.name
 
     def get_auto_docstring(self, symbol):
+        """Get the docstring of ``symbol``.
+
+        By default, take the docstring from the property denoted by the
+        ``docstring_property`` attribute of this object.
+
+        ``symbol`` is a :class:`~sphinxcontrib.emacs.lisp.Symbol` from the
+        abstract interpreter, as returned by :meth:`lookup_auto_symbol`.
+
+        Return the ``docstring``, or ``None`` if ``symbol`` has no docstring.
+
+        """
         return symbol.properties.get(self.docstring_property)
 
     def get_auto_doc_nodes(self):
+        """Get the parsed docstring.
+
+        Return the parsed docstring as list of nodes.  Return an empty list, if
+        the ``auto`` option was not set.
+
+        """
         symbol = self.lookup_auto_symbol()
         if symbol:
             docstring = self.get_auto_docstring(symbol)
@@ -149,6 +209,13 @@ class EmacsLispSymbol(ObjectDescription):
             return []
 
     def run(self):
+        """Run this directive.
+
+        In addition to the default processing of the
+        :class:`~sphinx.directives.ObjectDescription` directive, add the
+        automatically extracted documentation if the ``auto`` option was set.
+
+        """
         result_nodes = ObjectDescription.run(self)
 
         if 'auto' in self.options:
@@ -166,11 +233,13 @@ class EmacsLispCLStruct(EmacsLispSymbol):
     """A directive to describe a CL struct."""
 
     def before_content(self):
+        """Add the name of the struct to the temporary environment data."""
         EmacsLispSymbol.before_content(self)
         if self.names:
             self.env.temp_data['el:cl-struct'] = self.names[0]
 
     def after_content(self):
+        """Remove the name of the struct from the temporary environment data."""
         EmacsLispSymbol.after_content(self)
         del self.env.temp_data['el:cl-struct']
 
@@ -183,6 +252,7 @@ class EmacsLispCLSlot(EmacsLispSymbol):
     """
 
     def handle_signature(self, sig, signode):
+        """Resolve the slot name against the current struct."""
         name = EmacsLispSymbol.handle_signature(self, sig, signode)
         struct = self.env.temp_data.get('el:cl-struct')
         if not struct:
@@ -207,6 +277,7 @@ class EmacsLispVariable(EmacsLispSymbol):
 
     @property
     def is_local_variable(self):
+        """Whether the documented variable is automatically buffer local."""
         if 'local' in self.options:
             return True
         else:
@@ -215,6 +286,7 @@ class EmacsLispVariable(EmacsLispSymbol):
 
     @property
     def is_risky_variable(self):
+        """Whether the documented variable is risky."""
         if 'risky' in self.options:
             return True
         else:
@@ -222,6 +294,12 @@ class EmacsLispVariable(EmacsLispSymbol):
             return symbol and symbol.properties.get('risky-local-variable')
 
     def get_safe_variable_predicate(self):
+        """Get the predicate marking the documented variable as safe.
+
+        Return the name of the predicate as string, or ``None`` if the variable
+        is not safe.
+
+        """
         safe = self.options.get('safe')
         if not safe:
             symbol = self.lookup_auto_symbol()
@@ -230,11 +308,27 @@ class EmacsLispVariable(EmacsLispSymbol):
             return str(safe)
 
     def add_inline_text(self, text, node):
+        """Adds inline ``text`` to ``node``.
+
+        Parse ``text`` with the inline text processor, and add the resulting
+        nodes to ``node``.
+
+        """
         children, msgs = self.state.inline_text(text, self.lineno)
         node += children
         node += msgs
 
-    def variable_annotations(self):
+    def make_variable_properties(self):
+        """Get a node for the variable properties.
+
+        Look at all special properties of the documented variables, and create
+        an admonition that describes all these properties in a human-readable
+        way.
+
+        Return the admonition node, or ``None``, if the documented variable has
+        no special properties.
+
+        """
         title = corenodes.title('Variable properties', 'Variable properties')
         body = corenodes.paragraph('', '')
         props = corenodes.admonition(
@@ -256,12 +350,19 @@ class EmacsLispVariable(EmacsLispSymbol):
         return props if len(body) > 0 else None
 
     def run(self):
+        """Run this directive.
+
+        In addition to the normal processing of the :class:`EmacsLispSymbol`
+        directive, also add the variable properties as returned by
+        :meth:`make_variable_properties` to the documentation.
+
+        """
         result_nodes = EmacsLispSymbol.run(self)
 
-        annotations = self.variable_annotations()
-        if annotations:
+        properties = self.make_variable_properties()
+        if properties:
             cont_node = result_nodes[-1][-1]
-            cont_node.insert(0, annotations)
+            cont_node.insert(0, properties)
 
         return result_nodes
 
@@ -277,12 +378,20 @@ class EmacsLispFunction(EmacsLispSymbol):
     docstring_property = 'function-documentation'
 
     def get_auto_signature(self, symbol):
+        """Extract the function signature of ``symbol``."""
         sig = EmacsLispSymbol.get_auto_signature(self, symbol)
         arglist = ' '.join(symbol.properties.get('function-arglist', []))
         return (sig + ' ' + arglist).strip()
 
-    def handle_signature(self, sig, signode):
-        parts = sig.split(' ')
+    def handle_signature(self, signature, signode):
+        """Handle the given ``signature``.
+
+        In addition to the normal signature handling of the
+        :class:`EmacsLispSymbol` directive, parse and annotate the function
+        signature of the symbol.
+
+        """
+        parts = signature.split(' ')
         name = parts[0]
         arguments = parts[1:]
         name = EmacsLispSymbol.handle_signature(self, name, signode)
@@ -337,12 +446,25 @@ class EmacsLispCommand(EmacsLispSymbol):
         return prefix_arg + ' ' + binding if prefix_arg else binding
 
     def make_type_annotation(self):
+        """Make a type annotation.
+
+        Instead of using the name of the object type, use the key sequence for
+        execution of this command as annotation.
+
+        """
         keys = self.with_prefix_arg('M-x')
         node = nodes.el_annotation(keys + ' ', keys + ' ')
         node['keep_texinfo'] = True
         return node
 
     def run(self):
+        """Run this directive.
+
+        In addition to the normal processing of the :class:`EmacsLispSymbol`
+        directive, also prepend an additional signature that describes the
+        keybinding of the documented command, if any.
+
+        """
         result_nodes = EmacsLispSymbol.run(self)
 
         # Insert a dedicated signature for the key binding before all other
