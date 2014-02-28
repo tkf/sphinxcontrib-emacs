@@ -30,6 +30,8 @@ from contextlib import contextmanager
 
 import sexpdata
 
+from sphinxcontrib.emacs.lisp import util as lisputil
+
 
 def strip_broken_function_quotes(sexp):
     # Sexpdata chokes on function quotes, putting the leading hash into a
@@ -43,28 +45,6 @@ def strip_broken_function_quotes(sexp):
                         and isinstance(sexp[i + 1], sexpdata.Quoted))]
     else:
         return sexp
-
-
-def is_quoted_symbol(sexp):
-    return (isinstance(sexp, sexpdata.Quoted) and
-            isinstance(sexp.value(), sexpdata.Symbol))
-
-
-def is_primitive(sexp):
-    return ((isinstance(sexp, list) and sexp == [])
-            or isinstance(sexp, (int, long, basestring, bool)))
-
-
-def unquote(sexp):
-    if not isinstance(sexp, sexpdata.Quoted):
-        raise ValueError('Not a quoted expression: {0!r}'.format(sexp))
-    return sexp.value()
-
-
-def to_plist(sexps):
-    keys = [s.value() for s in sexps[::2]]
-    values = sexps[1::2]
-    return dict(zip(keys, values))
 
 
 class Source(namedtuple('_Source', 'file feature')):
@@ -145,12 +125,12 @@ def new_context(old_context, **kwargs):
 class AbstractInterpreter(object):
 
     def put(self, _context, _function, name, prop, value):
-        if all(is_quoted_symbol(s) for s in [name, prop]):
-            symbol = self.env.intern(unquote(name))
-            prop = unquote(prop).value()
-            if is_quoted_symbol(value):
-                value = self.env.intern(unquote(value))
-            elif not is_primitive(value):
+        if all(lisputil.is_quoted_symbol(s) for s in [name, prop]):
+            symbol = self.env.intern(lisputil.unquote(name))
+            prop = lisputil.unquote(prop).value()
+            if lisputil.is_quoted_symbol(value):
+                value = self.env.intern(lisputil.unquote(value))
+            elif not lisputil.is_primitive(value):
                 # We cannot handle non-constant values
                 return
             symbol.properties[prop] = value
@@ -174,17 +154,17 @@ class AbstractInterpreter(object):
                 docstring = None
         if rest:
             # Destructure and evaluate the keyword arguments of defcustom's
-            plist = to_plist(rest)
+            plist = lisputil.to_plist(rest)
             package_version = plist.get(':package-version')
             if isinstance(package_version, sexpdata.Quoted):
-                package_version = unquote(package_version)
+                package_version = lisputil.unquote(package_version)
                 if isinstance(package_version, list):
                     package = package_version[0].value()
                     version = package_version[2]
                     symbol.properties['package-version'] = (package, version)
             safe_predicate = plist.get(':safe')
-            if is_quoted_symbol(safe_predicate):
-                symbol.properties['safe-local-variable'] = unquote(
+            if lisputil.is_quoted_symbol(safe_predicate):
+                symbol.properties['safe-local-variable'] = lisputil.unquote(
                     safe_predicate).value()
             if plist.get(':risky'):
                 symbol.properties['risky-local-variable'] = True
