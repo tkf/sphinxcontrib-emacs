@@ -51,6 +51,7 @@ def setup(app):
     app.add_domain(EmacsLispDomain)
     # Auto doc support
     app.add_config_value('emacs_lisp_load_path', [], 'env')
+    app.add_config_value('emacs_lisp_debug_docstring_parser', False, '')
     # Texinfo references
     app.add_role('infonode', InfoNodeXRefRole())
     app.connect(str('missing-reference'), resolve_info_references)

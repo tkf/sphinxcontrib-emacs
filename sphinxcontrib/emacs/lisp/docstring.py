@@ -42,13 +42,14 @@ class Context(namedtuple('_Context', 'inliner reporter pending_text')):
 
 
 class Parser(object):
-    def __init__(self, reporter):
+    def __init__(self, reporter, debug=False):
         self.reporter = reporter
+        self.debug = debug
 
     def parse(self, inputstring, source_file=None, source_symbol=None):
         statemachine = StateMachineWS(initial_state='Body',
                                       state_classes=STATE_CLASSES,
-                                      debug=True)
+                                      debug=self.debug)
         inputlines = string2lines(inputstring, tab_width=8,
                                   convert_whitespace=True)
         if source_file and source_symbol:

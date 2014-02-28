@@ -198,7 +198,9 @@ class EmacsLispSymbol(ObjectDescription):
                     line=self.lineno)
                 return []
             else:
-                parser = DocstringParser(self.state_machine.reporter)
+                parser = DocstringParser(
+                    self.state_machine.reporter,
+                    self.env.config.emacs_lisp_debug_docstring_parser)
                 source = symbol.source_of_scope(self.emacs_lisp_scope)
                 # FIXME: We should have a source mapping over the whole source
                 # file, but unfortunately sexpdata doesn't provide source
