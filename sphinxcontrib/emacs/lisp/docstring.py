@@ -265,11 +265,27 @@ class Inliner(object):
         (?:(?P<symprefix>[Ss]ymbol\s+)`(?P<symbol>[^']+)') | # A literal symbol
         (?:(?P<urlprefix>URL\s+)`(?P<url>[^']+)') | # A URL reference
         (?:`(?P<literal>[^']+)') | # A literal reference
-        (?:\b(?P<metavar>[-_A-Z]{4,})\b) # A meta variable, as four or more uppercase letters
+        (?:\b(?P<metavar>[-_A-Z]+)\b) # A meta variable, as uppercase letters
         """,
         re.MULTILINE | re.UNICODE | re.VERBOSE)
 
     symbol_pattern = re.compile(r'^[\w/?-]+$', re.UNICODE)
+
+    def __init__(self, min_metavars_chars=4):
+        """Create a new inliner.
+
+        ``min_metavars_chars`` is the minimum number of subsequent uppercase
+        letters to consider as metavariable, to avoid marking normal acronyms
+        such as XML as meta-variable.
+
+        """
+        self.min_metavars_chars = min_metavars_chars
+        # The inliner to parse the contents of a literal.  Inside a literal, we
+        # consider all uppercase letters as meta-variable.
+        if min_metavars_chars <= 0:
+            self.literal_inliner = self
+        else:
+            self.literal_inliner = self.__class__(min_metavars_chars=0)
 
     def parse(self, text):
         position = 0
@@ -356,7 +372,7 @@ class Inliner(object):
 
     def handle_literal(self, rawtext, value, _groups):
         # Try to parse the nested contents of the value
-        nested_nodes = self.parse(value)
+        nested_nodes = self.literal_inliner.parse(value)
         if len(nested_nodes) == 1 and isinstance(nested_nodes[0], nodes.Text):
             # There was nothing to parse, so check whether its a symbol,
             # otherwise fall back to a plain literal
@@ -368,4 +384,10 @@ class Inliner(object):
             return [nodes.literal(rawtext, '', *nested_nodes)]
 
     def handle_metavar(self, rawtext, value, _groups):
-        return [el_metavariable(rawtext, value.lower())]
+        if len(value) >= self.min_metavars_chars:
+            nodecls = el_metavariable
+            text = value.lower()
+        else:
+            nodecls = nodes.Text
+            text = value
+        return [nodecls(rawtext, text)]
