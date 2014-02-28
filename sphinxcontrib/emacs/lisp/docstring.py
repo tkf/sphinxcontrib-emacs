@@ -88,6 +88,12 @@ class DocstringState(StateWS):
         state_machine.unlink()
         return children, state_machine.abs_line_offset(), blank_finish
 
+    def _goto_line_safe(self, newline_offset):
+        try:
+            self.state_machine.goto_line(newline_offset)
+        except EOFError:
+            pass
+
 
 class Body(DocstringState):
     patterns = {'text': r''}
@@ -110,6 +116,7 @@ class SpecializedBody(Body):
 
 
 class DefinitionList(SpecializedBody):
+
     def text(self, match, context, _next_state):
         # Instead of parsing plain text as in Body, we now proceed to parse a
         # Definition
@@ -172,7 +179,7 @@ class Text(DocstringState):
             blank_finish=blank_finish, blank_finish_state='Definition',
             context=context)
         definition_list.extend(children)
-        self.state_machine.goto_line(newline_offset)
+        self._goto_line_safe(newline_offset)
         result = [definition_list]
         if not blank_finish:
             lineno = self.state_machine.abs_line_number() + 1
