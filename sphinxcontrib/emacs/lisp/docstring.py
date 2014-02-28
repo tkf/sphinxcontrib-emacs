@@ -79,7 +79,7 @@ class SpecializedBody(Body):
     # Abort all body states, to let subclasses only enable the specific states
     # allowed in a special body part
 
-    def _invalid_input(*args):
+    def _invalid_input(self, _match=None, _context=None, _next_state=None):
         self.state_machine.previous_line()
         raise EOFError()
 
@@ -87,7 +87,7 @@ class SpecializedBody(Body):
 
 
 class DefinitionList(SpecializedBody):
-    def text(self, match, context, next_state):
+    def text(self, match, _context, _next_state):
         # Instead of parsing plain text as in Body, we now proceed to parse a
         # Definition
         return [match.string], 'Definition', []
@@ -107,13 +107,13 @@ class Text(DocstringState):
     def _nested_list_parse(self, lines, input_offset, initial_state,
                            blank_finish, blank_finish_state=None):
         state_machine = self.state_machine.make_nested(initial_state)
-        nodes = state_machine.run(lines, input_offset)
+        children = state_machine.run(lines, input_offset)
         if blank_finish_state is None:
             blank_finish_state = initial_state
         state_machine.states[blank_finish_state].blank_finish = blank_finish
         blank_finish = state_machine.states[blank_finish_state].blank_finish
         state_machine.unlink()
-        return nodes, state_machine.abs_line_offset(), blank_finish
+        return children, state_machine.abs_line_offset(), blank_finish
 
     def _paragraph(self, lines, lineno=None):
         if lineno is None:

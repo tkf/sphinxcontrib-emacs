@@ -315,8 +315,8 @@ class EmacsLispVariable(EmacsLispSymbol):
 
         """
         children, msgs = self.state.inline_text(text, self.lineno)
-        node += children
-        node += msgs
+        node.extend(children)
+        node.extend(msgs)
 
     def make_variable_properties(self):
         """Get a node for the variable properties.

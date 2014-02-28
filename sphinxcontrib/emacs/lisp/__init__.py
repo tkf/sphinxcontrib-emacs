@@ -183,7 +183,7 @@ class AbstractEnvironment(object):
         if isinstance(name, sexpdata.Symbol):
             name = name.value()
         else:
-            raise ValueError('Invalid symbol name: {0!r}'.format(symbol))
+            raise ValueError('Invalid symbol name: {0!r}'.format(name))
         return self.top_level.setdefault(name, Symbol(name))
 
     def provide(self, name, filename=None):
