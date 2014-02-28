@@ -271,6 +271,51 @@ class Inliner(object):
 
     symbol_pattern = re.compile(r'^[\w/?-]+$', re.UNICODE)
 
+    def parse(self, text):
+        position = 0
+        result_nodes = []
+        for match in self.inline_patterns.finditer(text):
+            if match.start() > position:
+                leading_text = text[position:match.start()]
+                result_nodes.append(nodes.Text(leading_text, leading_text))
+            position = match.end()
+            groups = match.groupdict()
+            handled = False
+            for key, value in groups.iteritems():
+                if value is not None:
+                    makenode = getattr(self, 'handle_' + key, None)
+                    if makenode:
+                        result_nodes.extend(makenode(match.group(0), value,
+                                                     groups))
+                        handled = True
+            if not handled:
+                raise NotImplementedError(
+                    'Failed to handle a branch of the inline patterns!')
+        if position < len(text):
+            trailing_text = text[position:]
+            result_nodes.append(nodes.Text(trailing_text, trailing_text))
+        return result_nodes
+
+    # Utilities
+
+    def _make_reference(self, rawtext, target, reftype,
+                        innernodeclass=nodes.literal, prefix=None):
+        if isinstance(reftype, basestring):
+            refdomain = None
+        else:
+            refdomain, reftype = reftype
+        ref = addnodes.pending_xref(rawtext, refwarn=False,
+                                    reftype=reftype, refdomain=refdomain,
+                                    refexplicit=False, reftarget=target)
+        ref += innernodeclass(target, target)
+        result = []
+        if prefix:
+            result.append(nodes.Text(prefix, prefix))
+        result.append(ref)
+        return result
+
+    # Handlers for pattern branches
+
     def handle_emphasis(self, rawtext, value, _groups): # pylint: disable=R0201
         return [nodes.strong(rawtext, value)]
 
@@ -324,44 +369,3 @@ class Inliner(object):
 
     def handle_metavar(self, rawtext, value, _groups):
         return [el_metavariable(rawtext, value.lower())]
-
-    def _make_reference(self, rawtext, target, reftype,
-                        innernodeclass=nodes.literal, prefix=None):
-        if isinstance(reftype, basestring):
-            refdomain = None
-        else:
-            refdomain, reftype = reftype
-        ref = addnodes.pending_xref(rawtext, refwarn=False,
-                                    reftype=reftype, refdomain=refdomain,
-                                    refexplicit=False, reftarget=target)
-        ref += innernodeclass(target, target)
-        result = []
-        if prefix:
-            result.append(nodes.Text(prefix, prefix))
-        result.append(ref)
-        return result
-
-    def parse(self, text):
-        position = 0
-        result_nodes = []
-        for match in self.inline_patterns.finditer(text):
-            if match.start() > position:
-                leading_text = text[position:match.start()]
-                result_nodes.append(nodes.Text(leading_text, leading_text))
-            position = match.end()
-            groups = match.groupdict()
-            handled = False
-            for key, value in groups.iteritems():
-                if value is not None:
-                    makenode = getattr(self, 'handle_' + key, None)
-                    if makenode:
-                        result_nodes.extend(makenode(match.group(0), value,
-                                                     groups))
-                        handled = True
-            if not handled:
-                raise NotImplementedError(
-                    'Failed to handle a branch of the inline patterns!')
-        if position < len(text):
-            trailing_text = text[position:]
-            result_nodes.append(nodes.Text(trailing_text, trailing_text))
-        return result_nodes
