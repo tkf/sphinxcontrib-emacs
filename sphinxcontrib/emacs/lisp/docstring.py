@@ -24,6 +24,7 @@
 
 
 import re
+from collections import namedtuple
 
 from docutils import nodes
 from docutils.statemachine import (string2lines,
@@ -34,44 +35,66 @@ from sphinx import addnodes
 from sphinxcontrib.emacs.nodes import el_metavariable
 
 
+class Context(namedtuple('_Context', 'inliner reporter pending_text')):
+
+    def with_pending_text(self, text):
+        return self._replace(pending_text=text)
+
+
 class Parser(object):
     def __init__(self, reporter):
         self.reporter = reporter
 
     def parse(self, inputstring, source_file=None, source_symbol=None):
-        statemachine = DocstringStateMachine(
-            initial_state='Body', reporter=self.reporter, debug=True)
+        statemachine = StateMachineWS(initial_state='Body',
+                                      state_classes=STATE_CLASSES,
+                                      debug=True)
         inputlines = string2lines(inputstring, tab_width=8,
                                   convert_whitespace=True)
         if source_file and source_symbol:
             input_source = '{0}#{1}'.format(source_file, source_symbol)
-        return statemachine.run(inputlines, input_source=input_source)
-
-
-class DocstringStateMachine(StateMachineWS):
-
-    def __init__(self, initial_state, reporter, debug=False, inliner=None):
-        StateMachineWS.__init__(self, state_classes=STATE_CLASSES,
-                                initial_state=initial_state, debug=debug)
-        self.reporter = reporter
-        self.inliner = inliner or Inliner()
-
-    def make_nested(self, inital_state):
-        return self.__class__(
-            initial_state=inital_state, reporter=self.reporter,
-            debug=self.debug, inliner=self.inliner)
+        context = Context(inliner=Inliner(), reporter=self.reporter,
+                          pending_text=None)
+        return statemachine.run(inputlines, input_source=input_source,
+                                context=context)
 
 
 class DocstringState(StateWS):
-    pass
+
+    def __init__(self, state_machine, debug=False):
+        if self.nested_sm_kwargs is None:
+            self.nested_sm_kwargs = {'state_classes': STATE_CLASSES,
+                                     'initial_state': 'Body'}
+        StateWS.__init__(self, state_machine, debug)
+
+    # Helpers
+
+    def _nested_parse(self, block, input_offset, context):
+        state_machine = self.nested_sm(
+            debug=self.debug, **self.nested_sm_kwargs)
+        children = state_machine.run(block, input_offset, context=context)
+        return children, state_machine.abs_line_offset()
+
+    def _nested_list_parse(self, lines, input_offset, initial_state,
+                           blank_finish, blank_finish_state=None, context=None):
+        sm_args = dict(self.nested_sm_kwargs)
+        sm_args['initial_state'] = initial_state
+        state_machine = self.nested_sm(debug=self.debug, **sm_args)
+        children = state_machine.run(lines, input_offset, context=context)
+        if blank_finish_state is None:
+            blank_finish_state = initial_state
+        state_machine.states[blank_finish_state].blank_finish = blank_finish
+        blank_finish = state_machine.states[blank_finish_state].blank_finish
+        state_machine.unlink()
+        return children, state_machine.abs_line_offset(), blank_finish
 
 
 class Body(DocstringState):
     patterns = {'text': r''}
     initial_transitions = ('text',)
 
-    def text(self, match, _context, _next_state):
-        return [match.string], 'Text', []
+    def text(self, match, context, _next_state):
+        return context.with_pending_text(match.string), 'Text', []
 
 
 class SpecializedBody(Body):
@@ -87,10 +110,10 @@ class SpecializedBody(Body):
 
 
 class DefinitionList(SpecializedBody):
-    def text(self, match, _context, _next_state):
+    def text(self, match, context, _next_state):
         # Instead of parsing plain text as in Body, we now proceed to parse a
         # Definition
-        return [match.string], 'Definition', []
+        return context.with_pending_text(match.string), 'Definition', []
 
 
 class Text(DocstringState):
@@ -99,82 +122,70 @@ class Text(DocstringState):
 
     # Helpers
 
-    def _nested_parse(self, block, input_offset):
-        state_machine = self.state_machine.make_nested('Body')
-        children = state_machine.run(block)
-        return children, state_machine.abs_line_offset()
-
-    def _nested_list_parse(self, lines, input_offset, initial_state,
-                           blank_finish, blank_finish_state=None):
-        state_machine = self.state_machine.make_nested(initial_state)
-        children = state_machine.run(lines, input_offset)
-        if blank_finish_state is None:
-            blank_finish_state = initial_state
-        state_machine.states[blank_finish_state].blank_finish = blank_finish
-        blank_finish = state_machine.states[blank_finish_state].blank_finish
-        state_machine.unlink()
-        return children, state_machine.abs_line_offset(), blank_finish
-
-    def _paragraph(self, lines, lineno=None):
+    def _paragraph(self, text, inliner, lineno=None):
         if lineno is None:
             lineno = self.state_machine.abs_line_number() - 1
-        text = '\n'.join(lines).rstrip()
-        children = self.state_machine.inliner.parse(text)
+        text = text.rstrip()
+        children = inliner.parse(text)
         para = nodes.paragraph(text, '')
         para.extend(children)
         para.source, para.line = self.state_machine.get_source_and_line(lineno)
         return para
 
-    def _make_definition_list_item(self, termlines):
-        assert len(termlines) == 1
+    def _make_definition_list_item(self, termtext, context):
         # Get the indented block
         indented, _, line_offset, blank_finish = self.state_machine.get_indented()
         item = nodes.definition_list_item(
-            '\n'.join(termlines + list(indented)))
+            termtext + '\n' + '\n'.join(indented))
         # Compensate for the term line which was already parsed
         lineno = self.state_machine.abs_line_number() - 1
         item.source, item.line = self.state_machine.get_source_and_line(lineno)
         # Parse the term line
-        term = nodes.term(termlines[0])
-        term.extend(self.state_machine.inliner.parse(termlines[0]))
+        term = nodes.term(termtext)
+        term.extend(context.inliner.parse(termtext))
         term.source, term.line = self.state_machine.get_source_and_line(lineno)
         item += term
         # And the definition
         definition = nodes.definition('')
         item += definition
-        children, _ = self._nested_parse(indented, input_offset=line_offset)
+        children, _ = self._nested_parse(
+            indented, input_offset=line_offset,
+            context=context.with_pending_text(None))
         definition.extend(children)
         return item, blank_finish
 
     # Whitespace transitions
 
     def eof(self, context):
-        return [self._paragraph(context)]
+        return [self._paragraph(context.pending_text, context.inliner)]
 
     def indent(self, match, context, next_state):
         definition_list = nodes.definition_list()
-        item, blank_finish = self._make_definition_list_item(context)
+        item, blank_finish = self._make_definition_list_item(
+            context.pending_text, context)
         definition_list += item
         offset = self.state_machine.line_offset + 1   # next line
         children, newline_offset, blank_finish = self._nested_list_parse(
             self.state_machine.input_lines[offset:],
             input_offset=self.state_machine.abs_line_offset() + 1,
             initial_state='DefinitionList',
-            blank_finish=blank_finish, blank_finish_state='Definition',)
+            blank_finish=blank_finish, blank_finish_state='Definition',
+            context=context)
         definition_list.extend(children)
         self.state_machine.goto_line(newline_offset)
         result = [definition_list]
         if not blank_finish:
             lineno = self.state_machine.abs_line_number() + 1
-            reporter = self.state_machine.reporter
+            reporter = context.reporter
             result.append(
                 reporter.warning('Definition list ends without a blank line; '
                                  'unexpected unindent.', line=lineno))
-        return [], 'Body', result
+        return context.with_pending_text(None), 'Body', result
 
     def blank(self, match, context, next_state):
         """End of a paragraph"""
-        return [], 'Body', [self._paragraph(context)]
+        para = self._paragraph(context.pending_text, context.inliner)
+        return context.with_pending_text(None), 'Body', [para]
 
     #  State transitions
 
@@ -186,12 +197,12 @@ class Text(DocstringState):
             block, src, srcline = err.args
             msg = self.state_machine.reporter.error(
                 'Unexpected indentation.', source=src, line=srcline)
-        lines = context + list(block)
-        paragraph = self._paragraph(lines)
+        text = context.pending_text + '\n' + '\n'.join(block)
+        paragraph = self._paragraph(text, context.inliner)
         result = [paragraph]
         if msg is not None:
             result.append(msg)
-        return [], next_state, result
+        return context.with_pending_text(None), next_state, result
 
 
 class SpecializedText(Text):
@@ -221,9 +232,10 @@ class Definition(SpecializedText):
 
     def indent(self, _match, context, _next_state):
         # Parse the current definition list item
-        item, blank_finish = self._make_definition_list_item(context)
+        item, blank_finish = self._make_definition_list_item(
+            context.pending_text, context)
         self.blank_finish = blank_finish
-        return [], 'DefinitionList', [item]
+        return context.with_pending_text(None), 'DefinitionList', [item]
 
 
 STATE_CLASSES = [
