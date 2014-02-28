@@ -138,6 +138,10 @@ class AbstractEnvironment(object):
         return feature in self.features
 
 
+def new_context(old_context, **kwargs):
+    return dict(old_context or {}, **kwargs)
+
+
 class AbstractInterpreter(object):
 
     def put(self, _context, _function, name, prop, value):
@@ -255,7 +259,3 @@ class AbstractInterpreter(object):
         if function:
             # pylint: disable=W0142
             return function(self, context or {}, function_name.value(), *args)
-
-
-def new_context(old_context, **kwargs):
-    return dict(old_context or {}, **kwargs)
