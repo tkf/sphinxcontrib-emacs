@@ -243,10 +243,12 @@ class Inliner(object):
         (?:(?P<faceprefix>[Ff]ace\s+)`(?P<face>[^']+)') | # A face reference
         (?:(?P<symprefix>[Ss]ymbol\s+)`(?P<symbol>[^']+)') | # A literal symbol
         (?:(?P<urlprefix>URL\s+)`(?P<url>[^']+)') | # A URL reference
-        (?:`(?P<symbol_reference>[^']+)') | # A generic symbol reference
+        (?:`(?P<literal>[^']+)') | # A literal reference
         (?:\b(?P<metavar>[-_A-Z]{4,})\b) # A meta variable, as four or more uppercase letters
         """,
         re.MULTILINE | re.UNICODE | re.VERBOSE)
+
+    symbol_pattern = re.compile(r'^[\w/?-]+$', re.UNICODE)
 
     def handle_emphasis(self, rawtext, value, _groups): # pylint: disable=R0201
         return [nodes.strong(rawtext, value)]
@@ -286,9 +288,18 @@ class Inliner(object):
         ref += nodes.Text(value)
         return [nodes.Text(groups['urlprefix'], groups['urlprefix']), ref]
 
-    def handle_symbol_reference(self, rawtext, value, _groups):
-        # FIXME: Parse nested literals!
-        return self._make_reference(rawtext, value, ('el', 'symbol'))
+    def handle_literal(self, rawtext, value, _groups):
+        # Try to parse the nested contents of the value
+        nested_nodes = self.parse(value)
+        if len(nested_nodes) == 1 and isinstance(nested_nodes[0], nodes.Text):
+            # There was nothing to parse, so check whether its a symbol,
+            # otherwise fall back to a plain literal
+            if self.symbol_pattern.match(value):
+                return self._make_reference(rawtext, value, ('el', 'symbol'))
+            else:
+                return [nodes.literal(rawtext, value)]
+        else:
+            return [nodes.literal(rawtext, '', *nested_nodes)]
 
     def handle_metavar(self, rawtext, value, _groups):
         return [el_metavariable(rawtext, value.lower())]
