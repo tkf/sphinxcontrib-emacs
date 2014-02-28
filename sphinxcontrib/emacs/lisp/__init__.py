@@ -31,6 +31,20 @@ from contextlib import contextmanager
 import sexpdata
 
 
+def strip_broken_function_quotes(sexp):
+    # Sexpdata chokes on function quotes, putting the leading hash into a
+    # dedicated symbol, see https://github.com/tkf/sexpdata/issues/3.  We strip
+    # this symbol recursively to turn these garbled symbols into standard
+    # quoted symbol
+    if isinstance(sexp, list):
+        return [strip_broken_function_quotes(s) for i, s in enumerate(sexp)
+                if not (s == sexpdata.Symbol('#')
+                        and i + 1 < len(sexp)
+                        and isinstance(sexp[i + 1], sexpdata.Quoted))]
+    else:
+        return sexp
+
+
 def is_quoted_symbol(sexp):
     return (isinstance(sexp, sexpdata.Quoted) and
             isinstance(sexp.value(), sexpdata.Symbol))
@@ -234,6 +248,7 @@ class AbstractInterpreter(object):
             return self.read('(\n{0}\n)'.format(source.read()))
 
     def eval(self, sexp, context=None):
+        sexp = strip_broken_function_quotes(sexp)
         function_name = sexp[0]
         args = sexp[1:]
         function = self.functions.get(function_name.value())
