@@ -38,9 +38,21 @@ from sphinxcontrib.emacs.info import INFO_RE
 
 
 class EmacsLispSlotXRefRole(XRefRole):
-    """A role to reference a CL slot."""
+    """A role to reference a CL slot.
+
+    A structure slot can either be referenced absolutely, by using
+    :samp:`{structure} {slot}` as target, or relatively, by omitting the
+    structure part.  In this case, the slot is resolved against the current
+    slot.
+
+    """
 
     def process_link(self, env, refnode, has_explicit_title, title, target):
+        """Process the link created by this role.
+
+        Make the target absolute by adding the current struct to it.
+
+        """
         # Obtain the current structure
         current_struct = env.temp_data.get('el:cl-struct')
         omit_struct = target.startswith('~')
@@ -70,6 +82,12 @@ class InfoNodeXRefRole(XRefRole):
 
 
     def process_link(self, env, refnode, has_explicit_title, title, target):
+        """Process the link created by this role.
+
+        Swap node and manual name, to more closely match the look of references
+        in Texinfo.
+
+        """
         # Normalize whitespace in info node targets
         target = re.sub(r'\s+', ' ', target, flags=re.UNICODE)
         refnode['has_explicit_title'] = has_explicit_title
