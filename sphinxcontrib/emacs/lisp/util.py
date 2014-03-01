@@ -26,14 +26,19 @@
 import sexpdata
 
 
+def is_quoted(sexp):
+    """Determine whether ``sexp`` is a quoted expression."""
+    return isinstance(sexp, sexpdata.Quoted)
+
+
 def is_quoted_symbol(sexp):
     """Determine whether ``sexp`` is a quoted symbol.
 
     Return ``True`` if so, or ``False`` otherwise.
 
     """
-    return (isinstance(sexp, sexpdata.Quoted) and
-            isinstance(sexp.value(), sexpdata.Symbol))
+    return (is_quoted(sexp) and
+            isinstance(unquote(sexp), sexpdata.Symbol))
 
 
 def is_primitive(sexp):
@@ -48,18 +53,31 @@ def is_primitive(sexp):
 
 
 def unquote(sexp):
-    """Unquotes ``sexp``.
+    """Unquote ``sexp``.
 
     Return ``sexp`` without the leading quote.  Raise :exc:`ValueError`, if
     ``sexp`` is not quoted.
 
     """
-    if not isinstance(sexp, sexpdata.Quoted):
+    if not is_quoted(sexp):
         raise ValueError('Not a quoted expression: {0!r}'.format(sexp))
     return sexp.value()
 
 
-def to_plist(sexps):
+def parse_cons_cell(sexp):
+    """Parse a cons cell ``sexp``.
+
+    Return the sub-expressions as ``(car, cdr)`` pair.  Raise
+    :exc:`ValueError`, if ``sexp`` is not a cons cell.
+
+    """
+    if len(sexp) == 3 and sexp[1] == sexpdata.Symbol('.'):
+        return sexp[0], sexp[2]
+    else:
+        raise ValueError('Not a cons cell: {0!r}'.format(sexp))
+
+
+def parse_plist(sexps):
     """Turn ``sexp`` into a dictionary.
 
     ``sexp`` should be in the form of a property list.
@@ -71,3 +89,42 @@ def to_plist(sexps):
     keys = [s.value() for s in sexps[::2]]
     values = sexps[1::2]
     return dict(zip(keys, values))
+
+
+def parse_package_version(sexp):
+    """Parse a ``:package-version`` argument.
+
+    Return a pair ``(package, version)`` with the results.  Raise
+    :exc:`ValueError`, if ``sexp`` is not a valid package version.
+
+    """
+    if is_quoted(sexp):
+        sexp = unquote(sexp)
+    car, cdr = parse_cons_cell(sexp)
+    if isinstance(car, sexpdata.Symbol) and isinstance(cdr, basestring):
+        return car.value(), cdr
+    else:
+        raise ValueError('Not a valid :package-version: {0!r}'.format(sexp))
+
+
+def parse_custom_keywords(sexp):
+    """Parse custom keywords from ``sexp``.
+
+    Return a dictionary with corresponding symbol properties.
+
+    """
+    plist = parse_plist(sexp)
+    properties = {}
+    package_version = plist.get(':package-version')
+    if package_version:
+        try:
+            properties['custom-package-version'] = parse_package_version(
+                package_version)
+        except ValueError:
+            pass
+    safe_predicate = plist.get(':safe')
+    if is_quoted_symbol(safe_predicate):
+        properties['safe-local-variable'] = unquote(safe_predicate).value()
+    if plist.get(':risky'):
+        properties['risky-local-variable'] = True
+    return properties

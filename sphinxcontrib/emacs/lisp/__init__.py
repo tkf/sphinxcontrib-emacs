@@ -46,7 +46,7 @@ def strip_broken_function_quotes(sexp):
         return [strip_broken_function_quotes(s) for i, s in enumerate(sexp)
                 if not (s == sexpdata.Symbol('#')
                         and i + 1 < len(sexp)
-                        and isinstance(sexp[i + 1], sexpdata.Quoted))]
+                        and lisputil.is_quoted_symbol(sexp[i + 1]))]
     else:
         return sexp
 
@@ -273,21 +273,7 @@ class AbstractInterpreter(object):
                 rest = [docstring] + list(rest)
                 docstring = None
         if rest and function == 'defcustom':
-            # Destructure and evaluate the keyword arguments of defcustom's
-            plist = lisputil.to_plist(rest)
-            package_version = plist.get(':package-version')
-            if isinstance(package_version, sexpdata.Quoted):
-                package_version = lisputil.unquote(package_version)
-                if isinstance(package_version, list):
-                    package = package_version[0].value()
-                    version = package_version[2]
-                    symbol.properties['package-version'] = (package, version)
-            safe_predicate = plist.get(':safe')
-            if lisputil.is_quoted_symbol(safe_predicate):
-                symbol.properties['safe-local-variable'] = lisputil.unquote(
-                    safe_predicate).value()
-            if plist.get(':risky'):
-                symbol.properties['risky-local-variable'] = True
+            symbol.properties.update(lisputil.parse_custom_keywords(rest))
         symbol.properties['buffer-local'] = function.endswith('-local')
 
     def eval_inner(self, _context, _function, *body):
