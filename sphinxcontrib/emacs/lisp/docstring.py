@@ -242,7 +242,7 @@ class Definition(SpecializedText):
         # Parse the current definition list item
         item, blank_finish = self._make_definition_list_item(
             context.pending_text, context)
-        self.blank_finish = blank_finish
+        self.blank_finish = blank_finish # pylint: disable=W0201
         return context.with_pending_text(None), 'DefinitionList', [item]
 
 
