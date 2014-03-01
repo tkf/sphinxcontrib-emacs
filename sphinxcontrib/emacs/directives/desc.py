@@ -45,7 +45,7 @@ class EmacsLispSymbol(ObjectDescription):
     docstring_property = 'variable-documentation'
 
     VERSION_CHANGE_LABEL = (
-        'This variable was introduced, or its default value was changed, in '
+        'This {objtype} was introduced, or its default value was changed, in '
         'version {version} of the {package} package.')
 
     @property
@@ -215,30 +215,34 @@ class EmacsLispSymbol(ObjectDescription):
         else:
             return []
 
-    def create_version_changed(self, package, version):
-        """Create a node documenting a version change.
+    def add_auto_version_changed(self, node):
+        """Add a version_node to document a version change to ``node``.
 
-        ``package`` is the name of the changed package as string, and
-        ``version`` the version number as string.
-
-        Note the version modification in the environment.
-
-        Return the node.
+        Add the new node at the end of ``node``.
 
         """
-        node = addnodes.versionmodified()
-        node.document = self.state.document
-        set_source_info(self, node)
-        node['type'] = 'versionchanged'
-        node['version'] = version
-        message = self.VERSION_CHANGE_LABEL.format(
-            version=version, package=package)
-        paragraph = corenodes.paragraph(
-            '', '', corenodes.inline('', message, classes=['versionmodified']))
-        node.append(paragraph)
-        env = self.state.document.settings.env
-        env.note_versionchange(node['type'], node['version'], node, node.line)
-        return node
+        symbol = self.lookup_auto_symbol()
+        if not symbol:
+            return
+        package, version = symbol.properties.get(
+            'custom-package-version', ('', ''))
+        if version:
+            version_node = addnodes.versionmodified()
+            version_node.document = self.state.document
+            set_source_info(self, version_node)
+            version_node['type'] = 'versionchanged'
+            version_node['version'] = version
+            msg = self.VERSION_CHANGE_LABEL.format(
+                objtype=self.object_type.lname, version=version,
+                package=package)
+            msg_node = corenodes.inline('', msg, classes=['versionmodified'])
+            version_node.append(corenodes.paragraph('', '', msg_node))
+            env = self.state.document.settings.env
+            env.note_versionchange(
+                version_node['type'], version_node['version'],
+                version_node, version_node.line)
+            node.append(version_node)
+            return node
 
     def run(self):
         """Run this directive.
@@ -386,22 +390,39 @@ class EmacsLispVariable(EmacsLispSymbol):
 
         In addition to the normal processing of the :class:`EmacsLispSymbol`
         directive, also add the variable properties as returned by
-        :meth:`make_variable_properties` to the documentation.
+        :meth:`make_variable_properties` to the documentation, and note a
+        version change, if any.
 
         """
         result_nodes = EmacsLispSymbol.run(self)
+        cont_node = result_nodes[-1][-1]
 
         properties = self.make_variable_properties()
         if properties:
-            cont_node = result_nodes[-1][-1]
             cont_node.insert(0, properties)
 
-        symbol = self.lookup_auto_symbol()
-        version = symbol and symbol.properties.get('custom-package-version')
-        if version:
-            package, version = version
-            cont_node.append(self.create_version_changed(package, version))
+        self.add_auto_version_changed(cont_node)
 
+        return result_nodes
+
+
+class EmacsLispFace(EmacsLispSymbol):
+    """A directive to describe an Emacs Lisp face."""
+
+    docstring_property = 'face-documentation'
+
+    def run(self):
+        """Run this directive.
+
+        In addition to the normal processing of the :class:`EmacsLispSymbol`
+        directive, also add the variable properties as returned by
+        :meth:`make_variable_properties` to the documentation, and note a
+        version change, if any.
+
+        """
+        result_nodes = EmacsLispSymbol.run(self)
+        cont_node = result_nodes[-1][-1]
+        self.add_auto_version_changed(cont_node)
         return result_nodes
 
 

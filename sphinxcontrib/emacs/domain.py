@@ -66,7 +66,7 @@ class EmacsLispDomain(Domain):
         'variable': desc.EmacsLispVariable,
         'option': desc.EmacsLispVariable,
         'hook': desc.EmacsLispVariable,
-        'face': desc.EmacsLispSymbol,
+        'face': desc.EmacsLispFace,
         'cl-struct': desc.EmacsLispCLStruct,
         'cl-slot': desc.EmacsLispCLSlot,
         'require': RequireLibrary,
