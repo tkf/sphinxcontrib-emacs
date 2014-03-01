@@ -27,6 +27,7 @@ from docutils import nodes as corenodes
 from docutils.parsers.rst import directives
 from sphinx import addnodes
 from sphinx.directives import ObjectDescription
+from sphinx.util.nodes import set_source_info
 
 from sphinxcontrib.emacs import nodes
 from sphinxcontrib.emacs.util import make_target
@@ -42,6 +43,10 @@ class EmacsLispSymbol(ObjectDescription):
     option_spec.update(ObjectDescription.option_spec)
 
     docstring_property = 'variable-documentation'
+
+    VERSION_CHANGE_LABEL = (
+        'This variable was introduced, or its default value was changed, in '
+        'version {version} of the {package} package.')
 
     @property
     def object_type(self):
@@ -210,6 +215,31 @@ class EmacsLispSymbol(ObjectDescription):
         else:
             return []
 
+    def create_version_changed(self, package, version):
+        """Create a node documenting a version change.
+
+        ``package`` is the name of the changed package as string, and
+        ``version`` the version number as string.
+
+        Note the version modification in the environment.
+
+        Return the node.
+
+        """
+        node = addnodes.versionmodified()
+        node.document = self.state.document
+        set_source_info(self, node)
+        node['type'] = 'versionchanged'
+        node['version'] = version
+        message = self.VERSION_CHANGE_LABEL.format(
+            version=version, package=package)
+        paragraph = corenodes.paragraph(
+            '', '', corenodes.inline('', message, classes=['versionmodified']))
+        node.append(paragraph)
+        env = self.state.document.settings.env
+        env.note_versionchange(node['type'], node['version'], node, node.line)
+        return node
+
     def run(self):
         """Run this directive.
 
@@ -365,6 +395,12 @@ class EmacsLispVariable(EmacsLispSymbol):
         if properties:
             cont_node = result_nodes[-1][-1]
             cont_node.insert(0, properties)
+
+        symbol = self.lookup_auto_symbol()
+        version = symbol and symbol.properties.get('custom-package-version')
+        if version:
+            package, version = version
+            cont_node.append(self.create_version_changed(package, version))
 
         return result_nodes
 
