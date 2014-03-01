@@ -260,7 +260,7 @@ class AbstractInterpreter(object):
         Includes ``defvar-local`` and ``defcustom``.
 
         Parses the variable documentation, and tries to look at the keyword
-        arguments to `defcustom`.
+        arguments to ``defcustom``.
 
         """
         symbol = self.intern_in_scope(name, 'variable', context)
@@ -275,6 +275,17 @@ class AbstractInterpreter(object):
         if rest and function == 'defcustom':
             symbol.properties.update(lisputil.parse_custom_keywords(rest))
         symbol.properties['buffer-local'] = function.endswith('-local')
+
+    def defface(self, context, function, name, _face_def, docstring, *rest):
+        """A call to ``defface``.
+
+        Parses the face documentation, and evaluates the custom keywords.
+
+        """
+        symbol = self.intern_in_scope(name, 'face', context)
+        symbol.properties['face-documentation'] = docstring
+        if rest:
+            symbol.properties.update(lisputil.parse_custom_keywords(rest))
 
     def eval_inner(self, _context, _function, *body):
         """Evaluate the inner expressions of a function.
@@ -291,6 +302,7 @@ class AbstractInterpreter(object):
         'defvar': defvar,
         'defcustom': defvar,
         'defvar-local': defvar,
+        'defface': defface,
         'eval-and-compile': eval_inner,
         'eval-when-compile': eval_inner,
     }
