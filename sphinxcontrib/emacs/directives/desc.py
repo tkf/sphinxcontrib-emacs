@@ -25,13 +25,14 @@
 
 from docutils import nodes as corenodes
 from docutils.parsers.rst import directives
+from docutils.statemachine import StringList, string2lines
 from sphinx import addnodes
 from sphinx.directives import ObjectDescription
 from sphinx.util.nodes import set_source_info
 
 from sphinxcontrib.emacs import nodes
 from sphinxcontrib.emacs.util import make_target
-from sphinxcontrib.emacs.lisp.docstring import Parser as DocstringParser
+from sphinxcontrib.emacs.lisp.docstring import transform_emacs_markup_to_rst
 
 
 class EmacsLispSymbol(ObjectDescription):
@@ -187,34 +188,6 @@ class EmacsLispSymbol(ObjectDescription):
         """
         return symbol.properties.get(self.docstring_property)
 
-    def get_auto_doc_nodes(self):
-        """Get the parsed docstring.
-
-        Return the parsed docstring as list of nodes.  Return an empty list, if
-        the ``auto`` option was not set.
-
-        """
-        symbol = self.lookup_auto_symbol()
-        if symbol:
-            docstring = self.get_auto_docstring(symbol)
-            if not docstring:
-                self.state_machine.reporter.warning(
-                    'no docstring for symbol {0}'.format(self.names[0]),
-                    line=self.lineno)
-                return []
-            else:
-                parser = DocstringParser(
-                    self.state_machine.reporter,
-                    self.env.config.emacs_lisp_debug_docstring_parser)
-                source = symbol.source_of_scope(self.emacs_lisp_scope)
-                # FIXME: We should have a source mapping over the whole source
-                # file, but unfortunately sexpdata doesn't provide source
-                # locations
-                return parser.parse(docstring, source_file=source.file,
-                                    source_symbol=symbol.name)
-        else:
-            return []
-
     def add_auto_version_changed(self, node):
         """Add a version_node to document a version change to ``node``.
 
@@ -256,11 +229,22 @@ class EmacsLispSymbol(ObjectDescription):
 
         if 'auto' in self.options:
             cont_node = result_nodes[-1][-1]
-            self.before_content()
-            children = self.get_auto_doc_nodes() + cont_node.children
-            cont_node.clear()
-            cont_node.extend(children)
-            self.after_content()
+            symbol = self.lookup_auto_symbol()
+            docstring = symbol and self.get_auto_docstring(symbol)
+            if not docstring:
+                self.state_machine.reporter.warning(
+                    'no docstring for symbol {0}'.format(self.names[0]),
+                    line=self.lineno)
+            else:
+                self.before_content()
+                auto_paragraph = corenodes.paragraph()
+                cont_node.insert(0, auto_paragraph)
+                docstring_rst = transform_emacs_markup_to_rst(docstring)
+                lines = string2lines(docstring_rst, tab_width=8,
+                                     convert_whitespace=True)
+                self.state.nested_parse(StringList(lines), self.content_offset,
+                                        auto_paragraph)
+                self.after_content()
 
         return result_nodes
 
