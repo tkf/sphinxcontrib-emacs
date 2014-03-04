@@ -117,36 +117,38 @@ class EmacsLispDomain(Domain):
 
     def resolve_xref(self, env, fromdoc, builder, # pylint: disable=R0913
                      objtype, target, node, content):
-        scopes = self.data['namespace'].get(target, {})
-        scope = None
+        target_scopes = self.data['namespace'].get(target, {})
+        obj_scope = None
         if objtype == 'symbol':
-            # A generic reference.  Figure out the target scope
-            if len(scopes) == 1:
-                # The symbol has just one scope, so use it
-                scope = scopes.keys()[0]
-            elif len(scopes) > 1:
-                # The generic symbol reference is ambiguous, because the
-                # symbol has multiple scopes attached
-                scope = next(ifilter(lambda s: s in scopes,
-                                     ['function', 'variable']),
-                             None)
-                if not scope:
-                    # If we have an unknown scope
-                    raise ValueError('Unknown scope: {0!r}'.format(scopes))
-                message = 'Ambiguous reference to {0}, in scopes {1}, using {2}'.format(
-                    target, ', '.join(scopes), scope)
+            candidate_scopes = [s for s in ['function', 'variable']
+                                if s in target_scopes]
+            if not candidate_scopes:
+                # The reference does not refer to a defined symbol, so do not
+                # consider as reference at all.  This is quite different from
+                # how missing references are normally handled in Sphinx, but we
+                # make this special exception to handle them like Emacs does.
+                # So instead of reporting an unresolved reference, we entirely
+                # drop the reference, and return just its contents.  To drop
+                # the reference, we also remove the corresponding classes from
+                # the content node.
+                content['classes'].remove('xref')
+                return content
+            if len(candidate_scopes) > 1:
+                message = ('Ambiguous reference to {0}, '
+                           'which is both variable and function').format(target)
                 env.warn(fromdoc, message, getattr(node, 'line'))
+            obj_scope = candidate_scopes[0]
         else:
-            # A reference with a specific objtype, so get the scope
-            # corresponding to the object type
-            scope = self.object_types[objtype].attrs['scope']
-        # If the target isn't present in the scope, we can't resolve the
-        # reference
-        if scope not in scopes:
+            # Resolve a typed reference
+            obj_scope = self.object_types[objtype].attrs['scope']
+
+        if obj_scope not in target_scopes:
+            # The symbol is not present in the scope of this reference
             return None
-        docname, _ = scopes[scope]
-        return make_refnode(builder, fromdoc, docname,
-                            make_target(scope, target), content, target)
+        todoc, _ = target_scopes[obj_scope]
+        return make_refnode(
+            builder, fromdoc, todoc, make_target(obj_scope, target),
+            content, target)
 
     def get_objects(self):
         for symbol, scopes in self.data['namespace'].iteritems():
