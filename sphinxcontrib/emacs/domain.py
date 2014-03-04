@@ -128,8 +128,7 @@ class EmacsLispDomain(Domain):
                 # The generic symbol reference is ambiguous, because the
                 # symbol has multiple scopes attached
                 scope = next(ifilter(lambda s: s in scopes,
-                                     ['function', 'variable',
-                                      'face', 'struct']),
+                                     ['function', 'variable']),
                              None)
                 if not scope:
                     # If we have an unknown scope
