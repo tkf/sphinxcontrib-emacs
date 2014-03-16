@@ -325,7 +325,7 @@ class EmacsLispVariable(EmacsLispSymbol):
             symbol = self.lookup_auto_symbol()
             safe = symbol and symbol.properties.get('safe-local-variable')
         if safe:
-            return str(safe)
+            return unicode(safe)
 
     def add_inline_text(self, text, node):
         """Adds inline ``text`` to ``node``.

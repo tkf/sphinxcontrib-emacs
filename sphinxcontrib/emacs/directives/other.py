@@ -50,6 +50,6 @@ class RequireLibrary(Directive):
             interpreter.require(feature)
             env.note_dependency(interpreter.locate(feature))
         except LookupError as error:
-            self.state_machine.reporter.warning(str(error), line=self.lineno)
+            self.state_machine.reporter.warning(unicode(error), line=self.lineno)
 
         return []
