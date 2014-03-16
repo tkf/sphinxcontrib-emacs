@@ -25,12 +25,18 @@
 
 import re
 
+from docutils import nodes
+from docutils.transforms import Transform
+from sphinx.addnodes import pending_xref
 
-class DocstringSourceTransformer(object):
-    """Transform Emacs docstring markup to ReST on source level."""
+from sphinxcontrib.emacs.nodes import el_metavariable
+
+
+class EmacsHelpModeMarkup(Transform):
+    """Transform inline Emacs docstring markup in text nodes."""
 
     #: Inline markup as understood by Emacs help mode.
-    INLINE_MARKUP =  re.compile(
+    INLINE_MARKUP = re.compile(
         r"""
         (?:(?P<infoprefix>[Ii]nfo\s+(?:[Nn]ode|[Aa]nchor)\s+)`(?P<infonode>[^']+)') | # An info reference
         (?:(?P<cmdprefix>[Cc]ommand\s+)`(?P<command>[^']+)') | # A command reference
@@ -41,7 +47,7 @@ class DocstringSourceTransformer(object):
         (?:(?P<symprefix>[Ss]ymbol\s+)`(?P<symbol>[^']+)') | # A literal symbol
         (?:(?P<urlprefix>URL\s+)`(?P<url>[^']+)') | # A URL reference
         (?:`(?P<literal>[^']+)') | # A literal reference
-        (?:\b(?P<metavar>[A-Z][-_A-Z]+)\b) # A meta variable, as uppercase letters
+        (?:\b(?P<metavar>[A-Z][-_A-Z]{3,})\b) # A meta variable, as four or more uppercase letters
         """, re.MULTILINE | re.UNICODE | re.VERBOSE)
 
     #: Regular expression for a symbol.
@@ -51,93 +57,128 @@ class DocstringSourceTransformer(object):
     SYMBOL_PATTERN = re.compile(r'^[^\s"\';()[\]`,]+$', re.UNICODE)
 
     #: A standalone meta variable
-    METAVAR_PATTERN = re.compile(r'\b([-_A-Z]+)\b', re.UNICODE)
+    METAVAR_PATTERN = re.compile(r'\b([A-Z][-_A-Z]*)\b', re.UNICODE)
 
-    def __init__(self, min_metavars_chars=4):
-        """Create a new inliner.
+    #: Literal node classes
+    LITERAL_NODE = (nodes.literal, nodes.FixedTextElement)
 
-        ``min_metavars_chars`` is the minimum number of subsequent uppercase
-        letters to consider as metavariable, to avoid marking normal acronyms
-        such as XML as meta-variable.
+    def apply(self):
+        root = self.startnode or self.document
+        for node in root.traverse(nodes.Text):
+            if isinstance(node.parent, self.LITERAL_NODE):
+                # Ignore inline and block literal text
+                continue
+            new_nodes = self._transform_text(unicode(node))
+            node.parent.replace(node, new_nodes)
+
+    def _transform_text(self, text):
+        """Transform inline markup in ``text``.
+
+        Return a list of all nodes parsed from ``text``.
 
         """
-        self.min_metavars_chars = min_metavars_chars
-        # The inliner to parse the contents of a literal.  Inside a literal, we
-        # consider all uppercase letters as meta-variable.
+        new_nodes = []
+        position = 0
+        for match in self.INLINE_MARKUP.finditer(text):
+            if match.start() > position:
+                # Extract leading text
+                leading = text[position:match.start()]
+                new_nodes.append(nodes.Text(leading, leading))
+            new_nodes.extend(self._transform_match(match,))
+            position = match.end()
+        if position < len(text):
+            new_nodes.append(nodes.Text(text[position:], text[position:]))
+        return new_nodes
 
-    def transform(self, docstring):
-        """Transform ``docstring`` into pure ReST.
+    def _transform_match(self, match):
+        """Transform ``match``.
 
-        Return the transformed docstring."""
-        return self.INLINE_MARKUP.sub(self._to_rst, docstring)
+        Delegate to the transformer method for the matched group, and return a
+        list of nodes.
 
-    def _to_rst(self, match):
-        """Return the ReST replacement text for ``match``."""
-        groups = match.groupdict()
-        for key, value in groups.iteritems():
+        """
+        for key, value in match.groupdict().iteritems():
             if value is not None:
                 transform = getattr(self, '_transform_' + key, None)
                 if transform:
-                    return transform(value, groups)
+                    return transform(value, match)
         # The pattern wasn't handled, which is an implementation error!
         raise NotImplementedError(
             'Failed to handle a branch of the inline patterns!')
 
-    def _to_role(self, role, text, prefix=''):
-        return '{0}:{1}:`{2}`'.format(prefix, role, text)
+    # Utilities
+
+    def _to_reference(self, reftype, reftarget,
+                      innernodecls=nodes.literal, prefix=None):
+        parts = reftype.split(':', 1)
+        if len(parts) > 1:
+            refdomain, reftype = parts
+        else:
+            refdomain = None
+        rawtext = "`'".format(reftarget)
+        ref = pending_xref(rawtext, refwarn=False,
+                           reftype=reftype, refdomain=refdomain,
+                           refexplicit=False, reftarget=reftarget)
+        ref += innernodecls(reftarget, reftarget)
+        result = []
+        if prefix:
+            result.append(nodes.Text(prefix, prefix))
+        result.append(ref)
+        return result
 
     # Handlers for pattern branches
 
-    def _transform_infonode(self, value, groups):
-        return self._to_role('infonode', value, prefix=groups['infoprefix'])
+    def _transform_infonode(self, value, match):
+        return self._to_reference('infonode', value,
+                                  innernodecls=nodes.emphasis,
+                                  prefix=match.group('infoprefix'))
 
-    def _transform_command(self, value, groups):
-        return self._to_role('el:command', value, prefix=groups['cmdprefix'])
+    def _transform_command(self, value, match):
+        return self._to_reference(
+            'el:command', value, prefix=match.group('cmdprefix'))
 
-    def _transform_function(self, value, groups):
-        return self._to_role('el:function', value, prefix=groups['funprefix'])
+    def _transform_function(self, value, match):
+        return self._to_reference(
+            'el:function', value, prefix=match.group('funprefix'))
 
-    def _transform_option(self, value, groups):
-        return self._to_role('el:option', value, prefix=groups['optprefix'])
+    def _transform_option(self, value, match):
+        return self._to_reference(
+            'el:option', value, prefix=match.group('optprefix'))
 
-    def _transform_variable(self, value, groups):
-        return self._to_role('el:variable', value, prefix=groups['varprefix'])
+    def _transform_variable(self, value, match):
+        return self._to_reference(
+            'el:variable', value, prefix=match.group('varprefix'))
 
-    def _transform_face(self, value, groups):
-        return self._to_role('el:face', value, prefix=groups['faceprefix'])
+    def _transform_face(self, value, match):
+        return self._to_reference(
+            'el:face', value, prefix=match.group('faceprefix'))
 
-    def _transform_symbol(self, value, groups):
-        self._to_role('code', value, prefix=groups['symbprefix'])
+    def _transform_symbol(self, value, match):
+        prefix = match.group('symprefix')
+        return [nodes.Text(prefix, prefix),
+                nodes.literal("`{0}'".format(value), value)]
 
-    def _transform_url(self, value, groups):
-        return '{0}{1}'.format(groups['urlprefix'], value)
+    def _transform_url(self, value, match):
+        prefix = match.group('urlprefix')
+        return [nodes.Text(prefix, prefix),
+                nodes.reference(value, value, refuri=value, internal=False)]
 
-    def _transform_literal(self, value, _groups):
-        if self.SYMBOL_PATTERN.match(value):
-            # A generic symbol reference
-            return self._to_role('el:symbol', value)
+    def _transform_literal(self, text, match):
+        if self.SYMBOL_PATTERN.match(text):
+            return [self._to_reference('el:symbol', text)]
         else:
-            # A literal.  Parse and replace meta variables, and return the
-            # thing
-            varcode = self.METAVAR_PATTERN.sub(
-                lambda m: '{{{0}}}'.format(m.group(1).lower()),
-                value)
-            return self._to_role('el:varcode', varcode)
+            node = nodes.literal(text, '')
+            position = 0
+            # Substitute meta variables in literal code
+            for match in self.METAVAR_PATTERN.iterfind(text):
+                if position < match.start():
+                    leading = text[position:match.start()]
+                    node += nodes.Text(leading, leading)
+                node += el_metavariable(match.group(0), match.group(0).lower())
+                position = match.end()
+            if position < len(text):
+                node += nodes.Text(text[position:], text[position:])
+            return [node]
 
-    def _transform_metavar(self, value, _groups):
-        if len(value) >= self.min_metavars_chars:
-            return self._to_role('el:var', value.lower())
-        else:
-            return value
-
-
-DEFAULT_DOCSTRING_TRANSFORMER = DocstringSourceTransformer()
-
-
-def transform_emacs_markup_to_rst(docstring):
-    """Convert all Emacs markup in ``docstring`` to ReST equivalents.
-
-    Return the transformed docstring.
-
-    """
-    return DEFAULT_DOCSTRING_TRANSFORMER.transform(docstring)
+    def _transform_metavar(self, value, _match):
+        return [el_metavariable(value, value.lower())]

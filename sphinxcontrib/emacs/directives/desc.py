@@ -32,7 +32,7 @@ from sphinx.util.nodes import set_source_info
 
 from sphinxcontrib.emacs import nodes
 from sphinxcontrib.emacs.util import make_target
-from sphinxcontrib.emacs.lisp.docstring import transform_emacs_markup_to_rst
+from sphinxcontrib.emacs.lisp.docstring import EmacsHelpModeMarkup
 
 
 class EmacsLispSymbol(ObjectDescription):
@@ -239,11 +239,13 @@ class EmacsLispSymbol(ObjectDescription):
                 self.before_content()
                 auto_paragraph = corenodes.paragraph()
                 cont_node.insert(0, auto_paragraph)
-                docstring_rst = transform_emacs_markup_to_rst(docstring)
-                lines = string2lines(docstring_rst, tab_width=8,
+                lines = string2lines(docstring, tab_width=8,
                                      convert_whitespace=True)
                 self.state.nested_parse(StringList(lines), self.content_offset,
                                         auto_paragraph)
+                transformer = EmacsHelpModeMarkup(self.state.document,
+                                                  auto_paragraph)
+                transformer.apply()
                 self.after_content()
 
         return result_nodes
