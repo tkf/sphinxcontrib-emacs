@@ -122,8 +122,8 @@ def varcode(role, rawtext, text, _lineno, _inliner_, _options=None,
     node = nodes.literal(rawtext, '', role=role, classes=[role])
     for match in METAVAR_RE.finditer(text):
         if match.start() > position:
-            trailing_text = text[position:match.start()]
-            node += nodes.Text(trailing_text, trailing_text)
+            leading = text[position:match.start()]
+            node += nodes.Text(leading, leading)
         node += el_metavariable(match.group(1), match.group(1))
         position = match.end()
     if position < len(text):
