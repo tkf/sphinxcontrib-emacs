@@ -298,7 +298,11 @@ class AbstractInterpreter(object):
     DEFAULT_FUNCTIONS = {
         'put': put,
         'defun': defun,
+        'defun*': defun,
+        'cl-defun': defun,
         'defmacro': defun,
+        'defmacro*': defun,
+        'cl-defmacro': defun,
         'defvar': defvar,
         'defcustom': defvar,
         'defvar-local': defvar,
